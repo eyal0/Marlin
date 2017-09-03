@@ -168,6 +168,7 @@
 #ifndef MSG_CONTROL
 #define MSG_CONTROL                         "Control"
 #endif
+#define LCD_STR_THERMOMETER "\x08"
 #ifndef MSG_MIN
 #define MSG_MIN                             " "LCD_STR_THERMOMETER " Min"
 #endif
