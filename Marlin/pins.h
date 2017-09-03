@@ -19,6 +19,52 @@
 #define DIGIPOTSS_PIN -1
 #define HEATER_3_PIN -1
 #define TEMP_3_PIN -1
+#define HEATER_BED_PIN     8    // BED
+
+#if !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
+  #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
+#endif
+
+#define LARGE_FLASH true
+
+#define X_STEP_PIN         54
+#define X_DIR_PIN          55
+#define X_ENABLE_PIN       38
+#define X_MIN_PIN           3
+#define X_MAX_PIN           2
+
+#define Y_STEP_PIN         60
+#define Y_DIR_PIN          61
+#define Y_ENABLE_PIN       56
+#define Y_MIN_PIN          14
+#define Y_MAX_PIN          15
+
+#define Z_STEP_PIN         46
+#define Z_DIR_PIN          48
+#define Z_ENABLE_PIN       62
+#define Z_MIN_PIN          18
+#define Z_MAX_PIN          19
+
+#define Y2_STEP_PIN        36
+#define Y2_DIR_PIN         34
+#define Y2_ENABLE_PIN      30
+
+#define Z2_STEP_PIN        36
+#define Z2_DIR_PIN         34
+#define Z2_ENABLE_PIN      30
+
+#define E0_STEP_PIN        26
+#define E0_DIR_PIN         28
+#define E0_ENABLE_PIN      24
+
+#define E1_STEP_PIN        36
+#define E1_DIR_PIN         34
+#define E1_ENABLE_PIN      30
+
+#define SDPOWER            -1
+#define SDSS               53
+#define LED_PIN            13
+
 
 #if MB(GEN7_CUSTOM)
   #include "pins_GEN7_CUSTOM.h"

@@ -66,7 +66,7 @@
   #undef FIRMWARE_URL
   #define FIRMWARE_URL "http://www.bq.com/gb/downloads-prusa-i3-hephestos.html"
 #else // Default firmware set to Mendel
-  #define MACHINE_NAME "Mendel"
+  #define MACHINE_NAME "ST3D Royal"
 #endif
 
 #ifdef CUSTOM_MENDEL_NAME

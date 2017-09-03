@@ -4,8 +4,8 @@
 
 #include "pins_RAMPS_13.h"
 
-#define FAN_PIN            9 // (Sprinter config)
-#define HEATER_1_PIN       -1
+#define FAN_PIN            -1 // (Sprinter config)
+#define HEATER_1_PIN       9
 
 //LCD Pins//
 
@@ -22,7 +22,7 @@
  #define BTN_ENC 12  //the click switch
  
  #define SDSS 53
- #define SDCARDDETECT -1 // Pin 49 if using display sd interface   
+ #define SDCARDDETECT 49 // Pin 49 if using display sd interface   
  
   #ifdef TEMP_STAT_LEDS
    #define STAT_LED_RED 64
@@ -30,7 +30,7 @@
   #endif
 #endif
 
-#elif define TEMP_STAT_LEDS
-  #define STAT_LED_RED       6
-  #define STAT_LED_BLUE     11
-#endif
+//#if define TEMP_STAT_LEDS
+//  #define STAT_LED_RED       6
+//  #define STAT_LED_BLUE     11
+//#endif
