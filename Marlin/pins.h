@@ -39,6 +39,8 @@
   #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
 #endif
 
+#define HEATER_BED_PIN     8    // BED
+
 #define Y2_STEP_PIN        36
 #define Y2_DIR_PIN         34
 #define Y2_ENABLE_PIN      30
@@ -47,8 +49,13 @@
 #define Z2_DIR_PIN         34
 #define Z2_ENABLE_PIN      30
 
-#define SDPOWER            -1
+#define SDSS               53
+#define LED_PIN            13
 
+#define SDPOWER            -1
+#define FAN_PIN            -1
+#define HEATER_1_PIN        9
+#define SDCARDDETECT 49 // Pin 49 if using display sd interface
 
 //
 // RAMPS 1.3 / 1.4 - ATmega1280, ATmega2560
