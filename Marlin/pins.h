@@ -35,6 +35,21 @@
 #ifndef __PINS_H__
 #define __PINS_H__
 
+#if !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
+  #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
+#endif
+
+#define Y2_STEP_PIN        36
+#define Y2_DIR_PIN         34
+#define Y2_ENABLE_PIN      30
+
+#define Z2_STEP_PIN        36
+#define Z2_DIR_PIN         34
+#define Z2_ENABLE_PIN      30
+
+#define SDPOWER            -1
+
+
 //
 // RAMPS 1.3 / 1.4 - ATmega1280, ATmega2560
 //
