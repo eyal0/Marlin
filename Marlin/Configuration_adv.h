@@ -576,15 +576,6 @@
   // The normal delay is 10µs. Use the lowest value that still gives a reliable display.
   //#define DOGM_SPI_DELAY_US 5
   // VIKI2 and miniVIKI require DOGLCD_SCK and DOGLCD_MOSI to be defined.
-  #ifdef VIKI2
-    #define DOGLCD_SCK SCK_PIN
-    #define DOGLCD_MOSI MOSI_PIN
-  #endif
-
-  #ifdef miniVIKI
-    #define DOGLCD_SCK SCK_PIN
-    #define DOGLCD_MOSI MOSI_PIN
-  #endif
 #endif // DOGLCD
 
 // @section safety
