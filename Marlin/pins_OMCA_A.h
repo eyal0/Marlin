@@ -1,4 +1,26 @@
 /**
+ * Marlin 3D Printer Firmware
+ * Copyright (C) 2016 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ *
+ * Based on Sprinter and grbl.
+ * Copyright (C) 2011 Camiel Gubbels / Erik van der Zalm
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+/**
  * Open Motion controller with enable based extruders (Alpha!)
  *
  *                        ATMega644
@@ -28,51 +50,86 @@
  *
  */
 
+/**
+ * Rev B    26 DEC 2016
+ *
+ * added pointer to a current Arduino IDE extension
+ *
+ */
+
+/**
+ * A useable Arduino IDE extension (board manager) can be found at
+ * https://github.com/Lauszus/Sanguino
+ *
+ * This extension has been tested on Arduino 1.6.12 & 1.8.0
+ *
+ * Here's the JSON path:
+ * https://raw.githubusercontent.com/Lauszus/Sanguino/master/package_lauszus_sanguino_index.json
+ *
+ * When installing select 1.0.2
+ *
+ * Installation instructions can be found at https://learn.sparkfun.com/pages/CustomBoardsArduino
+ * Just use the above JSON URL instead of Sparkfun's JSON.
+ *
+ * Once installed select the Sanguino board and then select the CPU.
+ *
+ */
+
 #ifndef __AVR_ATmega644__
-  #error Oops!  Make sure you have 'SanguinoA' selected from the 'Tools -> Boards' menu.
+  #error "Oops!  Make sure you have 'Sanguino' selected from the 'Tools -> Boards' menu."
 #endif
 
+#define BOARD_NAME         "Alpha OMCA"
+
+//
+// Limit Switches
+//
+#define X_STOP_PIN          0
+#define Y_STOP_PIN          1
+#define Z_STOP_PIN          2
+
+//
+// Steppers
+//
 #define X_STEP_PIN         21
 #define X_DIR_PIN          20
 #define X_ENABLE_PIN       24
-#define X_STOP_PIN         0
 
 #define Y_STEP_PIN         23
 #define Y_DIR_PIN          22
 #define Y_ENABLE_PIN       24
-#define Y_STOP_PIN         1
 
 #define Z_STEP_PIN         26
 #define Z_DIR_PIN          25
 #define Z_ENABLE_PIN       24
-#define Z_STOP_PIN         2
 
-#define E0_STEP_PIN         28
-#define E0_DIR_PIN          27
-#define E0_ENABLE_PIN       24
+#define E0_STEP_PIN        28
+#define E0_DIR_PIN         27
+#define E0_ENABLE_PIN      24
 
-#define E1_STEP_PIN         -1 // 19
-#define E1_DIR_PIN          -1 // 18
-#define E1_ENABLE_PIN       24
+#define E1_STEP_PIN        -1 // 19
+#define E1_DIR_PIN         -1 // 18
+#define E1_ENABLE_PIN      24
 
-#define E2_STEP_PIN         -1 // 17
-#define E2_DIR_PIN          -1 // 16
-#define E2_ENABLE_PIN       24
+#define E2_STEP_PIN        -1 // 17
+#define E2_DIR_PIN         -1 // 16
+#define E2_ENABLE_PIN      24
 
-#define SDPOWER            -1
+//
+// Temperature Sensors
+//
+#define TEMP_0_PIN          0   // Analog Input (D27)
+
+//
+// Heaters / Fans
+//
+#define HEATER_0_PIN        4
+
+#define FAN_PIN             3
+
+//
+// Misc. Functions
+//
 #define SDSS               11
-#define SDCARDDETECT       -1 // 10 optional also used as mode pin
-#define LED_PIN            -1
-#define FAN_PIN            3
-#define PS_ON_PIN          -1
-#define KILL_PIN           -1
 
-#define HEATER_0_PIN       4
-#define HEATER_1_PIN       -1 // 12
-#define HEATER_2_PIN       -1 // 13
-#define TEMP_0_PIN          0 //D27   // MUST USE ANALOG INPUT NUMBERING NOT DIGITAL OUTPUT NUMBERING!!!!!!!!!
-#define TEMP_1_PIN         -1 // 1
-#define TEMP_2_PIN         -1 // 2
-#define HEATER_BED_PIN     -1 // 14/15
-#define TEMP_BED_PIN       -1 // 1,2 or I2C
 /*  Unused (1) (2) (3) 4 5 6 7 8 9 10 11 12 13 (14) (15) (16) 17 (18) (19) (20) (21) (22) (23) 24 (25) (26) (27) 28 (29) (30) (31)  */
