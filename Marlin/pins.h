@@ -722,5 +722,7 @@
 #define HEATER_1_PIN        9
 #define SD_DETECT_PIN      49 // Pin 49 if using display sd interface
 #define KILL_PIN           -1
+#define BTN_ENC            31
+#undef LCD_SCREEN_ROT_180
 
 #endif // __PINS_H__
