@@ -38,12 +38,7 @@
 
   #define EXTRUSION_MULTIPLIER 1.0
   #define RETRACTION_MULTIPLIER 1.0
-  #define NOZZLE 0.4
-  #define FILAMENT 1.75
-  #define LAYER_HEIGHT 0.2
   #define PRIME_LENGTH 10.0
-  #define BED_TEMP 60.0
-  #define HOTEND_TEMP 205.0
   #define OOZE_AMOUNT 0.3
 
   #define SIZE_OF_INTERSECTION_CIRCLES 5
@@ -134,15 +129,10 @@
     extern char lcd_status_message[];
   #endif
   extern float destination[XYZE];
-  void set_destination_to_current();
+  void set_destination_from_current();
   void prepare_move_to_destination();
-  #if AVR_AT90USB1286_FAMILY  // Teensyduino & Printrboard IDE extensions have compile errors without this
-    inline void sync_plan_position_e() { planner.set_e_position_mm(current_position[E_AXIS]); }
-    inline void set_current_to_destination() { COPY(current_position, destination); }
-  #else
-    void sync_plan_position_e();
-    void set_current_to_destination();
-  #endif
+  inline void sync_plan_position_e() { planner.set_e_position_mm(current_position[E_AXIS]); }
+  inline void set_current_from_destination() { COPY(current_position, destination); }
   #if ENABLED(NEWPANEL)
     void lcd_setstatusPGM(const char* const message, const int8_t level);
     void chirp_at_user();
@@ -230,7 +220,7 @@
     if (current_position[Z_AXIS] < Z_CLEARANCE_BETWEEN_PROBES) {
       do_blocking_move_to_z(Z_CLEARANCE_BETWEEN_PROBES);
       stepper.synchronize();
-      set_current_to_destination();
+      set_current_from_destination();
     }
 
     if (turn_on_heaters()) goto LEAVE;
@@ -255,7 +245,7 @@
     ZERO(vertical_mesh_line_flags);
 
     // Move nozzle to the specified height for the first layer
-    set_destination_to_current();
+    set_destination_from_current();
     destination[Z_AXIS] = g26_layer_height;
     move_to(destination, 0.0);
     move_to(destination, g26_ooze_amount);
@@ -284,7 +274,7 @@
 
         // If this mesh location is outside the printable_radius, skip it.
 
-        if (!position_is_reachable_raw_xy(circle_x, circle_y)) continue;
+        if (!position_is_reachable(circle_x, circle_y)) continue;
 
         xi = location.x_index;  // Just to shrink the next few lines and make them easier to understand
         yi = location.y_index;
@@ -333,16 +323,16 @@
           if (tmp_div_30 < 0) tmp_div_30 += 360 / 30;
           if (tmp_div_30 > 11) tmp_div_30 -= 360 / 30;
 
-          float x = circle_x + cos_table[tmp_div_30],    // for speed, these are now a lookup table entry
-                y = circle_y + sin_table[tmp_div_30],
+          float rx = circle_x + cos_table[tmp_div_30],    // for speed, these are now a lookup table entry
+                ry = circle_y + sin_table[tmp_div_30],
                 xe = circle_x + cos_table[tmp_div_30 + 1],
                 ye = circle_y + sin_table[tmp_div_30 + 1];
           #if IS_KINEMATIC
             // Check to make sure this segment is entirely on the bed, skip if not.
-            if (!position_is_reachable_raw_xy(x, y) || !position_is_reachable_raw_xy(xe, ye)) continue;
-          #else                                              // not, we need to skip
-            x  = constrain(x, X_MIN_POS + 1, X_MAX_POS - 1); // This keeps us from bumping the endstops
-            y  = constrain(y, Y_MIN_POS + 1, Y_MAX_POS - 1);
+            if (!position_is_reachable(rx, ry) || !position_is_reachable(xe, ye)) continue;
+          #else                                               // not, we need to skip
+            rx = constrain(rx, X_MIN_POS + 1, X_MAX_POS - 1); // This keeps us from bumping the endstops
+            ry = constrain(ry, Y_MIN_POS + 1, Y_MAX_POS - 1);
             xe = constrain(xe, X_MIN_POS + 1, X_MAX_POS - 1);
             ye = constrain(ye, Y_MIN_POS + 1, Y_MAX_POS - 1);
           #endif
@@ -358,7 +348,7 @@
           //  debug_current_and_destination(seg_msg);
           //}
 
-          print_line_from_here_to_there(LOGICAL_X_POSITION(x), LOGICAL_Y_POSITION(y), g26_layer_height, LOGICAL_X_POSITION(xe), LOGICAL_Y_POSITION(ye), g26_layer_height);
+          print_line_from_here_to_there(rx, ry, g26_layer_height, xe, ye, g26_layer_height);
 
         }
         if (look_for_lines_to_connect())
@@ -464,7 +454,7 @@
               sy = ey = constrain(mesh_index_to_ypos(j), Y_MIN_POS + 1, Y_MAX_POS - 1);
               ex = constrain(ex, X_MIN_POS + 1, X_MAX_POS - 1);
 
-              if (position_is_reachable_raw_xy(sx, sy) && position_is_reachable_raw_xy(ex, ey)) {
+              if (position_is_reachable(sx, sy) && position_is_reachable(ex, ey)) {
 
                 if (g26_debug_flag) {
                   SERIAL_ECHOPAIR(" Connecting with horizontal line (sx=", sx);
@@ -475,8 +465,7 @@
                   SERIAL_EOL();
                   //debug_current_and_destination(PSTR("Connecting horizontal line."));
                 }
-
-                print_line_from_here_to_there(LOGICAL_X_POSITION(sx), LOGICAL_Y_POSITION(sy), g26_layer_height, LOGICAL_X_POSITION(ex), LOGICAL_Y_POSITION(ey), g26_layer_height);
+                print_line_from_here_to_there(sx, sy, g26_layer_height, ex, ey, g26_layer_height);
               }
               bit_set(horizontal_mesh_line_flags, i, j);   // Mark it as done so we don't do it again, even if we skipped it
             }
@@ -498,7 +487,7 @@
                 sy = constrain(sy, Y_MIN_POS + 1, Y_MAX_POS - 1);
                 ey = constrain(ey, Y_MIN_POS + 1, Y_MAX_POS - 1);
 
-                if (position_is_reachable_raw_xy(sx, sy) && position_is_reachable_raw_xy(ex, ey)) {
+                if (position_is_reachable(sx, sy) && position_is_reachable(ex, ey)) {
 
                   if (g26_debug_flag) {
                     SERIAL_ECHOPAIR(" Connecting with vertical line (sx=", sx);
@@ -509,7 +498,7 @@
                     SERIAL_EOL();
                     debug_current_and_destination(PSTR("Connecting vertical line."));
                   }
-                  print_line_from_here_to_there(LOGICAL_X_POSITION(sx), LOGICAL_Y_POSITION(sy), g26_layer_height, LOGICAL_X_POSITION(ex), LOGICAL_Y_POSITION(ey), g26_layer_height);
+                  print_line_from_here_to_there(sx, sy, g26_layer_height, ex, ey, g26_layer_height);
                 }
                 bit_set(vertical_mesh_line_flags, i, j);   // Mark it as done so we don't do it again, even if skipped
               }
@@ -539,7 +528,7 @@
       G26_line_to_destination(feed_value);
 
       stepper.synchronize();
-      set_destination_to_current();
+      set_destination_from_current();
     }
 
     // Check if X or Y is involved in the movement.
@@ -555,7 +544,7 @@
     G26_line_to_destination(feed_value);
 
     stepper.synchronize();
-    set_destination_to_current();
+    set_destination_from_current();
 
   }
 
@@ -601,9 +590,8 @@
 
     // If the end point of the line is closer to the nozzle, flip the direction,
     // moving from the end to the start. On very small lines the optimization isn't worth it.
-    if (dist_end < dist_start && (SIZE_OF_INTERSECTION_CIRCLES) < FABS(line_length)) {
+    if (dist_end < dist_start && (SIZE_OF_INTERSECTION_CIRCLES) < FABS(line_length))
       return print_line_from_here_to_there(ex, ey, ez, sx, sy, sz);
-    }
 
     // Decide whether to retract & bump
 
@@ -631,12 +619,12 @@
 
     g26_extrusion_multiplier  = EXTRUSION_MULTIPLIER;
     g26_retraction_multiplier = RETRACTION_MULTIPLIER;
-    g26_nozzle                = NOZZLE;
-    g26_filament_diameter     = FILAMENT;
-    g26_layer_height          = LAYER_HEIGHT;
+    g26_nozzle                = MESH_TEST_NOZZLE_SIZE;
+    g26_filament_diameter     = DEFAULT_NOMINAL_FILAMENT_DIA;
+    g26_layer_height          = MESH_TEST_LAYER_HEIGHT;
     g26_prime_length          = PRIME_LENGTH;
-    g26_bed_temp              = BED_TEMP;
-    g26_hotend_temp           = HOTEND_TEMP;
+    g26_bed_temp              = MESH_TEST_BED_TEMP;
+    g26_hotend_temp           = MESH_TEST_HOTEND_TEMP;
     g26_prime_flag            = 0;
 
     g26_ooze_amount           = parser.linearval('O', OOZE_AMOUNT);
@@ -742,9 +730,9 @@
       return UBL_ERR;
     }
 
-    g26_x_pos = parser.linearval('X', current_position[X_AXIS]);
-    g26_y_pos = parser.linearval('Y', current_position[Y_AXIS]);
-    if (!position_is_reachable_xy(g26_x_pos, g26_y_pos)) {
+    g26_x_pos = parser.seenval('X') ? RAW_X_POSITION(parser.value_linear_units()) : current_position[X_AXIS];
+    g26_y_pos = parser.seenval('Y') ? RAW_Y_POSITION(parser.value_linear_units()) : current_position[Y_AXIS];
+    if (!position_is_reachable(g26_x_pos, g26_y_pos)) {
       SERIAL_PROTOCOLLNPGM("?Specified X,Y coordinate out of bounds.");
       return UBL_ERR;
     }
@@ -837,7 +825,7 @@
         lcd_setstatusPGM(PSTR("User-Controlled Prime"), 99);
         chirp_at_user();
 
-        set_destination_to_current();
+        set_destination_from_current();
 
         recover_filament(destination); // Make sure G26 doesn't think the filament is retracted().
 
@@ -854,7 +842,7 @@
                                     // but because the planner has a buffer, we won't be able
                                     // to stop as quickly. So we put up with the less smooth
                                     // action to give the user a more responsive 'Stop'.
-          set_destination_to_current();
+          set_destination_from_current();
           idle();
         }
 
@@ -878,11 +866,11 @@
         lcd_setstatusPGM(PSTR("Fixed Length Prime."), 99);
         lcd_quick_feedback();
       #endif
-      set_destination_to_current();
+      set_destination_from_current();
       destination[E_AXIS] += g26_prime_length;
       G26_line_to_destination(planner.max_feedrate_mm_s[E_AXIS] / 15.0);
       stepper.synchronize();
-      set_destination_to_current();
+      set_destination_from_current();
       retract_filament(destination);
     }
 
