@@ -339,7 +339,7 @@
 
 // Comment the following line to disable PID and enable bang-bang.
 #define PIDTEMP
-#define BANG_MAX 255 // limits current to nozzle while in bang-bang mode; 255=full current
+#define BANG_MAX 128 // limits current to nozzle while in bang-bang mode; 255=full current
 #define PID_MAX BANG_MAX // limits current to nozzle while PID is active (see PID_FUNCTIONAL_RANGE below); 255=full current
 #if ENABLED(PIDTEMP)
   //#define PID_AUTOTUNE_MENU // Add PID Autotune to the LCD "Temperature" menu to run M303 and apply the result.
@@ -354,9 +354,9 @@
 
   // If you are using a pre-configured hotend then you can use one of the value sets by uncommenting it
   // Something3D ROYAL
-  #define  DEFAULT_Kp 33.15
-  #define  DEFAULT_Ki 3.01
-  #define  DEFAULT_Kd 91.24
+  #define  DEFAULT_Kp 8.95
+  #define  DEFAULT_Ki 1.05
+  #define  DEFAULT_Kd 19.04
 
   // Ultimaker
   //#define  DEFAULT_Kp 22.2
@@ -403,9 +403,9 @@
 
   //120V 250W silicone heater into 4mm borosilicate (MendelMax 1.5+)
   //Something3D ROYAL
-  #define  DEFAULT_bedKp 62.97
-  #define  DEFAULT_bedKi 10.92
-  #define  DEFAULT_bedKd 90.79
+  #define  DEFAULT_bedKp 181.94
+  #define  DEFAULT_bedKi 34.17
+  #define  DEFAULT_bedKd 242.21
 
   //from FOPDT model - kp=.39 Tp=405 Tdead=66, Tc set to 79.2, aggressive factor of .15 (vs .1, 1, 10)
 //#define  DEFAULT_bedKp 10.00
