@@ -666,7 +666,7 @@
 #define SDSS               53
 #define LED_PIN            13
 
-#define ORIG_E0_AUTO_FAN_PIN 5
+#define E0_AUTO_FAN_PIN     5
 #define SDPOWER            -1
 #define FAN_PIN             9
 #define HEATER_1_PIN       -1
