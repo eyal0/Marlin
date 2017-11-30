@@ -665,9 +665,10 @@
 #define LED_PIN            13
 
 #define SDPOWER            -1
-#define FAN_PIN             9
 #define HEATER_1_PIN       -1
+#undef SD_DETECT_PIN
 #define SD_DETECT_PIN      49 // Pin 49 if using display sd interface
+#undef KILL_PIN
 #define KILL_PIN           -1
 
 #endif // __PINS_H__
