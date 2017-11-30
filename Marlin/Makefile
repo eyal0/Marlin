@@ -56,7 +56,7 @@
 #
 
 # This defines the board to compile for (see boards.h for your board's ID)
-HARDWARE_MOTHERBOARD ?= 11
+HARDWARE_MOTHERBOARD ?= 67
 
 # Arduino source install directory, and version number
 # On most linuxes this will be /usr/share/arduino
@@ -64,7 +64,7 @@ ARDUINO_INSTALL_DIR  ?= ${HOME}/Arduino
 ARDUINO_VERSION      ?= 106
 
 # You can optionally set a path to the avr-gcc tools. Requires a trailing slash. (ex: /usr/local/avr-gcc/bin)
-AVR_TOOLS_PATH ?=
+AVR_TOOLS_PATH ?= $(ARDUINO_INSTALL_DIR)/hardware/tools/avr/bin/
 
 #Programmer configuration
 UPLOAD_RATE        ?= 57600
@@ -267,7 +267,7 @@ VPATH += $(ARDUINO_INSTALL_DIR)/hardware/arduino/avr/cores/arduino
 
 VPATH += $(ARDUINO_INSTALL_DIR)/hardware/arduino/avr/libraries/SPI
 VPATH += $(ARDUINO_INSTALL_DIR)/hardware/arduino/avr/libraries/SPI/src
-VPATH += $(ARDUINO_INSTALL_DIR)/libraries/LiquidCrystal/src
+VPATH += $(ARDUINO_INSTALL_DIR)/libraries/LiquidCrystal
 ifeq ($(LIQUID_TWI2), 1)
 VPATH += $(ARDUINO_INSTALL_DIR)/libraries/Wire
 VPATH += $(ARDUINO_INSTALL_DIR)/libraries/Wire/utility
@@ -327,7 +327,8 @@ CXXSRC += Wire.cpp
 endif
 
 ifeq ($(U8GLIB), 1)
-SRC += u8g_ll_api.c u8g_bitmap.c u8g_clip.c u8g_com_null.c u8g_delay.c u8g_page.c u8g_pb.c u8g_pb16h1.c u8g_rect.c u8g_state.c u8g_font.c u8g_font_data.c
+SRC += u8g_ll_api.c u8g_bitmap.c u8g_clip.c u8g_com_null.c u8g_delay.c u8g_page.c u8g_pb.c u8g_pb16h1.c u8g_rect.c u8g_state.c u8g_font.c u8g_font_data.c u8g_dev_st7565_nhd_c12864.c u8g_rot.c u8g_com_api.c u8g_com_arduino_hw_spi.c u8g_com_arduino_common.c u8g_pb16v1.c
+CXXSRC += U8glib.cpp
 endif
 
 ifeq ($(RELOC_WORKAROUND), 1)
