@@ -653,8 +653,6 @@
   #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
 #endif
 
-#define HEATER_BED_PIN     8    // BED
-
 #define Y2_STEP_PIN        36
 #define Y2_DIR_PIN         34
 #define Y2_ENABLE_PIN      30
@@ -666,11 +664,11 @@
 #define SDSS               53
 #define LED_PIN            13
 
-#define E0_AUTO_FAN_PIN     5
 #define SDPOWER            -1
-#define FAN_PIN             9
 #define HEATER_1_PIN       -1
+#undef SD_DETECT_PIN
 #define SD_DETECT_PIN      49 // Pin 49 if using display sd interface
+#undef KILL_PIN
 #define KILL_PIN           -1
 
 #endif // __PINS_H__
