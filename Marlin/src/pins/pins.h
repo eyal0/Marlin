@@ -825,4 +825,26 @@
 
 #include "../HAL/HAL_spi_pins.h"
 
+#if !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
+  #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
+#endif
+
+#define Y2_STEP_PIN        36
+#define Y2_DIR_PIN         34
+#define Y2_ENABLE_PIN      30
+
+#define Z2_STEP_PIN        36
+#define Z2_DIR_PIN         34
+#define Z2_ENABLE_PIN      30
+
+#define SDSS               53
+#define LED_PIN            13
+
+#define SDPOWER            -1
+#define HEATER_1_PIN       -1
+#undef SD_DETECT_PIN
+#define SD_DETECT_PIN      49 // Pin 49 if using display sd interface
+#undef KILL_PIN
+#define KILL_PIN           -1
+
 #endif // __PINS_H__

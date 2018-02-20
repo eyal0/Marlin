@@ -75,7 +75,7 @@
   /**
    * Defines a generic printer name to be output to the LCD after booting Marlin.
    */
-  #define MACHINE_NAME "3D Printer"
+  #define MACHINE_NAME "Something 3D"
 
   /**
    * The SOURCE_CODE_URL is the location where users will find the Marlin Source
@@ -83,7 +83,7 @@
    * has a distinct Github fork— the Source Code URL should just be the main
    * Marlin repository.
    */
-  #define SOURCE_CODE_URL "https://github.com/MarlinFirmware/Marlin"
+  #define SOURCE_CODE_URL "https://github.com/eyal0/Marlin"
 
   /**
    * Default generic printer UUID.
