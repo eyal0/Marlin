@@ -29,7 +29,6 @@
 #include <inttypes.h>
 
 #include <util/delay.h>
-#include <avr/pgmspace.h>
 #include <avr/eeprom.h>
 #include <avr/interrupt.h>
 
@@ -58,6 +57,8 @@ void idle(
 );
 
 void manage_inactivity(bool ignore_stepper_queue = false);
+
+extern const char axis_codes[XYZE];
 
 #if ENABLED(DUAL_X_CARRIAGE) || ENABLED(DUAL_NOZZLE_DUPLICATION_MODE)
   extern bool extruder_duplication_enabled;
@@ -175,8 +176,19 @@ void manage_inactivity(bool ignore_stepper_queue = false);
 #define _AXIS(AXIS) AXIS ##_AXIS
 
 void enable_all_steppers();
+void disable_e_stepper(const uint8_t e);
 void disable_e_steppers();
 void disable_all_steppers();
+
+void sync_plan_position();
+void sync_plan_position_e();
+
+#if IS_KINEMATIC
+  void sync_plan_position_kinematic();
+  #define SYNC_PLAN_POSITION_KINEMATIC() sync_plan_position_kinematic()
+#else
+  #define SYNC_PLAN_POSITION_KINEMATIC() sync_plan_position()
+#endif
 
 void FlushSerialRequestResend();
 void ok_to_send();
@@ -200,27 +212,28 @@ bool enqueue_and_echo_command(const char* cmd, bool say_ok=false); // Add a sing
 void enqueue_and_echo_commands_P(const char * const cmd);          // Set one or more commands to be prioritized over the next Serial/SD command.
 void clear_command_queue();
 
+#define HAS_LCD_QUEUE_NOW (ENABLED(ULTIPANEL) && (ENABLED(AUTO_BED_LEVELING_UBL) || ENABLED(PID_AUTOTUNE_MENU) || ENABLED(ADVANCED_PAUSE_FEATURE)))
+#define HAS_QUEUE_NOW (ENABLED(SDSUPPORT) || HAS_LCD_QUEUE_NOW)
+#if HAS_QUEUE_NOW
+  // Return only when commands are actually enqueued
+  void enqueue_and_echo_command_now(const char* cmd, bool say_ok=false);
+  #if HAS_LCD_QUEUE_NOW
+    void enqueue_and_echo_commands_P_now(const char * const cmd);
+  #endif
+#endif
+
 extern millis_t previous_cmd_ms;
 inline void refresh_cmd_timeout() { previous_cmd_ms = millis(); }
-
-#if ENABLED(FAST_PWM_FAN)
-  void setPwmFrequency(uint8_t pin, int val);
-#endif
 
 /**
  * Feedrate scaling and conversion
  */
+extern float feedrate_mm_s;
 extern int16_t feedrate_percentage;
 
-#define MMM_TO_MMS(MM_M) ((MM_M)/60.0)
-#define MMS_TO_MMM(MM_S) ((MM_S)*60.0)
 #define MMS_SCALED(MM_S) ((MM_S)*feedrate_percentage*0.01)
 
 extern bool axis_relative_modes[];
-extern bool volumetric_enabled;
-extern int16_t flow_percentage[EXTRUDERS]; // Extrusion factor for each extruder
-extern float filament_size[EXTRUDERS]; // cross-sectional area of filament (in millimeters), typically around 1.75 or 2.85, 0 disables the volumetric calculations for the extruder.
-extern float volumetric_multiplier[EXTRUDERS]; // reciprocal of cross-sectional area of filament (in square millimeters), stored this way to reduce computational burden in planner
 extern bool axis_known_position[XYZ];
 extern bool axis_homed[XYZ];
 extern volatile bool wait_for_heatup;
@@ -229,7 +242,7 @@ extern volatile bool wait_for_heatup;
   extern volatile bool wait_for_user;
 #endif
 
-extern float current_position[NUM_AXIS];
+extern float current_position[XYZE], destination[XYZE];
 
 // Workspace offsets
 #if HAS_WORKSPACE_OFFSET
@@ -252,14 +265,14 @@ extern float current_position[NUM_AXIS];
   #define WORKSPACE_OFFSET(AXIS) 0
 #endif
 
-#define LOGICAL_POSITION(POS, AXIS) ((POS) + WORKSPACE_OFFSET(AXIS))
-#define RAW_POSITION(POS, AXIS)     ((POS) - WORKSPACE_OFFSET(AXIS))
+#define NATIVE_TO_LOGICAL(POS, AXIS) ((POS) + WORKSPACE_OFFSET(AXIS))
+#define LOGICAL_TO_NATIVE(POS, AXIS) ((POS) - WORKSPACE_OFFSET(AXIS))
 
 #if HAS_POSITION_SHIFT || DISABLED(DELTA)
-  #define LOGICAL_X_POSITION(POS)   LOGICAL_POSITION(POS, X_AXIS)
-  #define LOGICAL_Y_POSITION(POS)   LOGICAL_POSITION(POS, Y_AXIS)
-  #define RAW_X_POSITION(POS)       RAW_POSITION(POS, X_AXIS)
-  #define RAW_Y_POSITION(POS)       RAW_POSITION(POS, Y_AXIS)
+  #define LOGICAL_X_POSITION(POS)   NATIVE_TO_LOGICAL(POS, X_AXIS)
+  #define LOGICAL_Y_POSITION(POS)   NATIVE_TO_LOGICAL(POS, Y_AXIS)
+  #define RAW_X_POSITION(POS)       LOGICAL_TO_NATIVE(POS, X_AXIS)
+  #define RAW_Y_POSITION(POS)       LOGICAL_TO_NATIVE(POS, Y_AXIS)
 #else
   #define LOGICAL_X_POSITION(POS)   (POS)
   #define LOGICAL_Y_POSITION(POS)   (POS)
@@ -267,9 +280,8 @@ extern float current_position[NUM_AXIS];
   #define RAW_Y_POSITION(POS)       (POS)
 #endif
 
-#define LOGICAL_Z_POSITION(POS)     LOGICAL_POSITION(POS, Z_AXIS)
-#define RAW_Z_POSITION(POS)         RAW_POSITION(POS, Z_AXIS)
-#define RAW_CURRENT_POSITION(A)     RAW_##A##_POSITION(current_position[A##_AXIS])
+#define LOGICAL_Z_POSITION(POS)     NATIVE_TO_LOGICAL(POS, Z_AXIS)
+#define RAW_Z_POSITION(POS)         LOGICAL_TO_NATIVE(POS, Z_AXIS)
 
 // Hotend Offsets
 #if HOTENDS > 1
@@ -291,29 +303,86 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
   void update_software_endstops(const AxisEnum axis);
 #endif
 
+#define MAX_COORDINATE_SYSTEMS 9
+#if ENABLED(CNC_COORDINATE_SYSTEMS)
+  extern float coordinate_system[MAX_COORDINATE_SYSTEMS][XYZ];
+  bool select_coordinate_system(const int8_t _new);
+#endif
+
+void report_current_position();
+
 #if IS_KINEMATIC
   extern float delta[ABC];
-  void inverse_kinematics(const float logical[XYZ]);
+  void inverse_kinematics(const float raw[XYZ]);
 #endif
 
 #if ENABLED(DELTA)
-  extern float endstop_adj[ABC],
+  extern float delta_height,
+               delta_endstop_adj[ABC],
                delta_radius,
+               delta_tower_angle_trim[ABC],
+               delta_tower[ABC][2],
                delta_diagonal_rod,
                delta_calibration_radius,
+               delta_diagonal_rod_2_tower[ABC],
                delta_segments_per_second,
-               delta_tower_angle_trim[ABC],
                delta_clip_start_height;
-  void recalc_delta_settings(float radius, float diagonal_rod, float tower_angle_trim[ABC]);
+
+  void recalc_delta_settings();
+  float delta_safe_distance_from_top();
+
+  #if ENABLED(DELTA_FAST_SQRT)
+    float Q_rsqrt(const float number);
+    #define _SQRT(n) (1.0f / Q_rsqrt(n))
+  #else
+    #define _SQRT(n) SQRT(n)
+  #endif
+
+  // Macro to obtain the Z position of an individual tower
+  #define DELTA_Z(V,T) V[Z_AXIS] + _SQRT(   \
+    delta_diagonal_rod_2_tower[T] - HYPOT2( \
+        delta_tower[T][X_AXIS] - V[X_AXIS], \
+        delta_tower[T][Y_AXIS] - V[Y_AXIS]  \
+      )                                     \
+    )
+
+  #define DELTA_IK(V) do {        \
+    delta[A_AXIS] = DELTA_Z(V, A_AXIS); \
+    delta[B_AXIS] = DELTA_Z(V, B_AXIS); \
+    delta[C_AXIS] = DELTA_Z(V, C_AXIS); \
+  }while(0)
+
 #elif IS_SCARA
   void forward_kinematics_SCARA(const float &a, const float &b);
+#endif
+
+#if ENABLED(G26_MESH_VALIDATION)
+  extern bool g26_debug_flag;
+#elif ENABLED(AUTO_BED_LEVELING_UBL)
+  constexpr bool g26_debug_flag = false;
+#endif
+
+#if ENABLED(AUTO_BED_LEVELING_BILINEAR)
+  #define _GET_MESH_X(I) (bilinear_start[X_AXIS] + (I) * bilinear_grid_spacing[X_AXIS])
+  #define _GET_MESH_Y(J) (bilinear_start[Y_AXIS] + (J) * bilinear_grid_spacing[Y_AXIS])
+#elif ENABLED(AUTO_BED_LEVELING_UBL)
+  #define _GET_MESH_X(I) ubl.mesh_index_to_xpos(I)
+  #define _GET_MESH_Y(J) ubl.mesh_index_to_ypos(J)
+#elif ENABLED(MESH_BED_LEVELING)
+  #define _GET_MESH_X(I) mbl.index_to_xpos[I]
+  #define _GET_MESH_Y(J) mbl.index_to_ypos[J]
 #endif
 
 #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
   extern int bilinear_grid_spacing[2], bilinear_start[2];
   extern float bilinear_grid_factor[2],
                z_values[GRID_MAX_POINTS_X][GRID_MAX_POINTS_Y];
-  float bilinear_z_offset(const float logical[XYZ]);
+  float bilinear_z_offset(const float raw[XYZ]);
+#endif
+
+#if ENABLED(AUTO_BED_LEVELING_BILINEAR) || ENABLED(MESH_BED_LEVELING)
+  typedef float (*element_2d_fn)(const uint8_t, const uint8_t);
+  void print_2d_array(const uint8_t sx, const uint8_t sy, const uint8_t precision, const element_2d_fn fn);
 #endif
 
 #if ENABLED(AUTO_BED_LEVELING_UBL)
@@ -323,22 +392,27 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
 
 #if HAS_LEVELING
   bool leveling_is_valid();
-  bool leveling_is_active();
   void set_bed_leveling_enabled(const bool enable=true);
   void reset_bed_level();
 #endif
 
 #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
-  void set_z_fade_height(const float zfh);
+  void set_z_fade_height(const float zfh, const bool do_report=true);
 #endif
 
+#if ENABLED(X_DUAL_ENDSTOPS)
+  extern float x_endstop_adj;
+#endif
+#if ENABLED(Y_DUAL_ENDSTOPS)
+  extern float y_endstop_adj;
+#endif
 #if ENABLED(Z_DUAL_ENDSTOPS)
   extern float z_endstop_adj;
 #endif
 
 #if HAS_BED_PROBE
   extern float zprobe_zoffset;
-  void refresh_zprobe_zoffset(const bool no_babystep=false);
+  bool set_probe_deployed(const bool deploy);
   #define DEPLOY_PROBE() set_probe_deployed(true)
   #define STOW_PROBE() set_probe_deployed(false)
 #else
@@ -355,10 +429,18 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
 
 #if FAN_COUNT > 0
   extern int16_t fanSpeeds[FAN_COUNT];
+  #if ENABLED(EXTRA_FAN_SPEED)
+    extern int16_t old_fanSpeeds[FAN_COUNT],
+                   new_fanSpeeds[FAN_COUNT];
+  #endif
   #if ENABLED(PROBING_FANS_OFF)
     extern bool fans_paused;
     extern int16_t paused_fanSpeeds[FAN_COUNT];
   #endif
+#endif
+
+#if ENABLED(USE_CONTROLLER_FAN)
+  extern int controllerFanSpeed;
 #endif
 
 #if ENABLED(BARICUDA)
@@ -369,29 +451,19 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
   extern bool filament_sensor;         // Flag that filament sensor readings should control extrusion
   extern float filament_width_nominal, // Theoretical filament diameter i.e., 3.00 or 1.75
                filament_width_meas;    // Measured filament diameter
-  extern uint8_t meas_delay_cm,        // Delay distance
-                 measurement_delay[];  // Ring buffer to delay measurement
-  extern int8_t filwidth_delay_index[2]; // Ring buffer indexes. Used by planner, temperature, and main code
+  extern uint8_t meas_delay_cm;        // Delay distance
+  extern int8_t measurement_delay[MAX_MEASUREMENT_DELAY + 1],  // Ring buffer to delay measurement
+                filwidth_delay_index[2]; // Ring buffer indexes. Used by planner, temperature, and main code
 #endif
 
 #if ENABLED(ADVANCED_PAUSE_FEATURE)
   extern AdvancedPauseMenuResponse advanced_pause_menu_response;
+  extern float filament_change_unload_length[EXTRUDERS],
+               filament_change_load_length[EXTRUDERS];
 #endif
 
 #if ENABLED(PID_EXTRUSION_SCALING)
   extern int lpq_len;
-#endif
-
-#if ENABLED(FWRETRACT)
-  extern bool autoretract_enabled;                 // M209 S - Autoretract switch
-  extern float retract_length,                     // M207 S - G10 Retract length
-               retract_feedrate_mm_s,              // M207 F - G10 Retract feedrate
-               retract_zlift,                      // M207 Z - G10 Retract hop size
-               retract_recover_length,             // M208 S - G11 Recover length
-               retract_recover_feedrate_mm_s,      // M208 F - G11 Recover feedrate
-               swap_retract_length,                // M207 W - G10 Swap Retract length
-               swap_retract_recover_length,        // M208 W - G11 Swap Recover length
-               swap_retract_recover_feedrate_mm_s; // M208 R - G11 Swap Recover feedrate
 #endif
 
 // Print job timer
@@ -404,15 +476,13 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
 // Handling multiple extruders pins
 extern uint8_t active_extruder;
 
-#if HAS_TEMP_HOTEND || HAS_TEMP_BED
-  void print_heaterstates();
-#endif
-
 #if ENABLED(MIXING_EXTRUDER)
   extern float mixing_factor[MIXING_STEPPERS];
 #endif
 
-void calculate_volumetric_multipliers();
+inline void set_current_from_destination() { COPY(current_position, destination); }
+inline void set_destination_from_current() { COPY(destination, current_position); }
+void prepare_move_to_destination();
 
 /**
  * Blocking movement and shorthand functions
@@ -430,6 +500,7 @@ void do_blocking_move_to_xy(const float &x, const float &y, const float &fr_mm_s
       || ENABLED(NOZZLE_CLEAN_FEATURE)                                             \
       || ENABLED(NOZZLE_PARK_FEATURE)                                              \
       || (ENABLED(ADVANCED_PAUSE_FEATURE) && ENABLED(HOME_BEFORE_FILAMENT_CHANGE)) \
+      || HAS_M206_COMMAND                                                          \
     ) || ENABLED(NO_MOTION_BEFORE_HOMING)
 
 #if HAS_AXIS_UNHOMED_ERR
@@ -446,7 +517,7 @@ void do_blocking_move_to_xy(const float &x, const float &y, const float &fr_mm_s
     extern const float L1, L2;
   #endif
 
-  inline bool position_is_reachable_raw_xy(const float &rx, const float &ry) {
+  inline bool position_is_reachable(const float &rx, const float &ry) {
     #if ENABLED(DELTA)
       return HYPOT2(rx, ry) <= sq(DELTA_PRINTABLE_RADIUS);
     #elif IS_SCARA
@@ -461,37 +532,29 @@ void do_blocking_move_to_xy(const float &x, const float &y, const float &fr_mm_s
     #endif
   }
 
-  inline bool position_is_reachable_by_probe_raw_xy(const float &rx, const float &ry) {
+  inline bool position_is_reachable_by_probe(const float &rx, const float &ry) {
 
     // Both the nozzle and the probe must be able to reach the point.
     // This won't work on SCARA since the probe offset rotates with the arm.
 
-    return position_is_reachable_raw_xy(rx, ry)
-        && position_is_reachable_raw_xy(rx - X_PROBE_OFFSET_FROM_EXTRUDER, ry - Y_PROBE_OFFSET_FROM_EXTRUDER);
+    return position_is_reachable(rx, ry)
+        && position_is_reachable(rx - (X_PROBE_OFFSET_FROM_EXTRUDER), ry - (Y_PROBE_OFFSET_FROM_EXTRUDER));
   }
 
 #else // CARTESIAN
 
-  inline bool position_is_reachable_raw_xy(const float &rx, const float &ry) {
+  inline bool position_is_reachable(const float &rx, const float &ry) {
       // Add 0.001 margin to deal with float imprecision
       return WITHIN(rx, X_MIN_POS - 0.001, X_MAX_POS + 0.001)
           && WITHIN(ry, Y_MIN_POS - 0.001, Y_MAX_POS + 0.001);
   }
 
-  inline bool position_is_reachable_by_probe_raw_xy(const float &rx, const float &ry) {
+  inline bool position_is_reachable_by_probe(const float &rx, const float &ry) {
       // Add 0.001 margin to deal with float imprecision
       return WITHIN(rx, MIN_PROBE_X - 0.001, MAX_PROBE_X + 0.001)
           && WITHIN(ry, MIN_PROBE_Y - 0.001, MAX_PROBE_Y + 0.001);
   }
 
 #endif // CARTESIAN
-
-FORCE_INLINE bool position_is_reachable_by_probe_xy(const float &lx, const float &ly) {
-  return position_is_reachable_by_probe_raw_xy(RAW_X_POSITION(lx), RAW_Y_POSITION(ly));
-}
-
-FORCE_INLINE bool position_is_reachable_xy(const float &lx, const float &ly) {
-  return position_is_reachable_raw_xy(RAW_X_POSITION(lx), RAW_Y_POSITION(ly));
-}
 
 #endif // MARLIN_H
