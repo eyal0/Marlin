@@ -36,8 +36,8 @@
 #define _FASTIO_LPC1768_H
 
 #include <LPC17xx.h>
-#include "include/Arduino.h"
-#include "pinmapping.h"
+#include <Arduino.h>
+#include <pinmapping.h>
 
 bool useable_hardware_PWM(pin_t pin);
 #define USEABLE_HARDWARE_PWM(pin) useable_hardware_PWM(pin)
@@ -102,7 +102,7 @@ bool useable_hardware_PWM(pin_t pin);
 // hg42: we cannot use USEABLE_HARDWARE_PWM because it uses a function that cannot be used statically
 // hg42: instead use PWM bit from the #define
 
-/// check if pin is an timer
+/// check if pin is a timer
 #define _GET_TIMER(IO)        TRUE  // could be LPC1768_PIN_PWM(IO), but there
 // hg42: could be this:
 // #define _GET_TIMER(IO)        LPC1768_PIN_PWM(IO)
@@ -132,7 +132,7 @@ bool useable_hardware_PWM(pin_t pin);
 /// check if pin is an output wrapper
 #define GET_OUTPUT(IO)  _GET_OUTPUT(IO)
 
-/// check if pin is an timer wrapper
+/// check if pin is a timer (wrapper)
 #define GET_TIMER(IO)  _GET_TIMER(IO)
 
 // Shorthand

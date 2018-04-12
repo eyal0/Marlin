@@ -44,6 +44,13 @@
 /* The timer calculations of this module informed by the 'RepRap cartesian firmware' by Zack Smith
    and Philipp Tiefenbacher. */
 
+/* Jerk controlled movements planner added by Eduardo José Tagle in April
+   2018, Equations based on Synthethos TinyG2 sources, but the fixed-point
+   implementation is a complete new one, as we are running the ISR with a
+   variable period.
+   Also implemented the Bézier velocity curve evaluation in ARM assembler,
+   to avoid impacting ISR speed. */
+
 #include "stepper.h"
 
 #ifdef __AVR__
@@ -109,39 +116,46 @@ long Stepper::counter_X = 0,
 
 volatile uint32_t Stepper::step_events_completed = 0; // The number of step events executed in the current block
 
+#if ENABLED(BEZIER_JERK_CONTROL)
+  int32_t __attribute__((used)) Stepper::bezier_A __asm__("bezier_A");    // A coefficient in Bézier speed curve with alias for assembler
+  int32_t __attribute__((used)) Stepper::bezier_B __asm__("bezier_B");    // B coefficient in Bézier speed curve with alias for assembler
+  int32_t __attribute__((used)) Stepper::bezier_C __asm__("bezier_C");    // C coefficient in Bézier speed curve with alias for assembler
+  uint32_t __attribute__((used)) Stepper::bezier_F __asm__("bezier_F");   // F coefficient in Bézier speed curve with alias for assembler
+  uint32_t __attribute__((used)) Stepper::bezier_AV __asm__("bezier_AV"); // AV coefficient in Bézier speed curve with alias for assembler
+  #ifdef __AVR__
+    bool __attribute__((used)) Stepper::A_negative __asm__("A_negative");   // If A coefficient was negative
+  #endif
+  bool Stepper::bezier_2nd_half;    // =false If Bézier curve has been initialized or not
+#endif
+
 #if ENABLED(LIN_ADVANCE)
+
+  uint32_t Stepper::LA_decelerate_after;
 
   constexpr hal_timer_t ADV_NEVER = HAL_TIMER_TYPE_MAX;
 
   hal_timer_t Stepper::nextMainISR = 0,
               Stepper::nextAdvanceISR = ADV_NEVER,
               Stepper::eISR_Rate = ADV_NEVER;
+  uint16_t Stepper::current_adv_steps = 0,
+           Stepper::final_adv_steps,
+           Stepper::max_adv_steps;
 
-  volatile int Stepper::e_steps[E_STEPPERS];
-  int Stepper::final_estep_rate,
-      Stepper::current_estep_rate[E_STEPPERS],
-      Stepper::current_adv_steps[E_STEPPERS];
+  int8_t Stepper::e_steps = 0;
 
-  /**
-   * See https://github.com/MarlinFirmware/Marlin/issues/5699#issuecomment-309264382
-   *
-   * This fix isn't perfect and may lose steps - but better than locking up completely
-   * in future the planner should slow down if advance stepping rate would be too high
-   */
-  FORCE_INLINE hal_timer_t adv_rate(const int steps, const hal_timer_t timer, const uint8_t loops) {
-    if (steps) {
-      const hal_timer_t rate = (timer * loops) / abs(steps);
-      //return constrain(rate, 1, ADV_NEVER - 1)
-      return rate ? rate : 1;
-    }
-    return ADV_NEVER;
-  }
+  #if E_STEPPERS > 1
+    int8_t Stepper::LA_active_extruder; // Copy from current executed block. Needed because current_block is set to NULL "too early".
+  #else
+    constexpr int8_t Stepper::LA_active_extruder;
+  #endif
+
+  bool Stepper::use_advance_lead;
 
 #endif // LIN_ADVANCE
 
-long Stepper::acceleration_time, Stepper::deceleration_time;
+int32_t Stepper::acceleration_time, Stepper::deceleration_time;
 
-volatile long Stepper::count_position[NUM_AXIS] = { 0 };
+volatile int32_t Stepper::count_position[NUM_AXIS] = { 0 };
 volatile signed char Stepper::count_direction[NUM_AXIS] = { 1, 1, 1, 1 };
 
 #if ENABLED(MIXING_EXTRUDER)
@@ -150,8 +164,10 @@ volatile signed char Stepper::count_direction[NUM_AXIS] = { 1, 1, 1, 1 };
 
 uint8_t Stepper::step_loops, Stepper::step_loops_nominal;
 
-hal_timer_t Stepper::OCR1A_nominal,
-            Stepper::acc_step_rate; // needed for deceleration start point
+hal_timer_t Stepper::OCR1A_nominal;
+#if DISABLED(BEZIER_JERK_CONTROL)
+  hal_timer_t Stepper::acc_step_rate; // needed for deceleration start point
+#endif
 
 volatile long Stepper::endstops_trigsteps[XYZ];
 
@@ -162,20 +178,20 @@ volatile long Stepper::endstops_trigsteps[XYZ];
   #define LOCKED_X2_MOTOR locked_x2_motor
   #define LOCKED_Y2_MOTOR locked_y2_motor
   #define LOCKED_Z2_MOTOR locked_z2_motor
-  #define DUAL_ENDSTOP_APPLY_STEP(AXIS,v)                                                                                                             \
-    if (performing_homing) {                                                                                                                          \
-      if (AXIS##_HOME_DIR < 0) {                                                                                                                      \
-        if (!(TEST(endstops.old_endstop_bits, AXIS##_MIN) && (count_direction[AXIS##_AXIS] < 0)) && !LOCKED_##AXIS##_MOTOR) AXIS##_STEP_WRITE(v);     \
-        if (!(TEST(endstops.old_endstop_bits, AXIS##2_MIN) && (count_direction[AXIS##_AXIS] < 0)) && !LOCKED_##AXIS##2_MOTOR) AXIS##2_STEP_WRITE(v);  \
-      }                                                                                                                                               \
-      else {                                                                                                                                          \
-        if (!(TEST(endstops.old_endstop_bits, AXIS##_MAX) && (count_direction[AXIS##_AXIS] > 0)) && !LOCKED_##AXIS##_MOTOR) AXIS##_STEP_WRITE(v);     \
-        if (!(TEST(endstops.old_endstop_bits, AXIS##2_MAX) && (count_direction[AXIS##_AXIS] > 0)) && !LOCKED_##AXIS##2_MOTOR) AXIS##2_STEP_WRITE(v);  \
-      }                                                                                                                                               \
-    }                                                                                                                                                 \
-    else {                                                                                                                                            \
-      AXIS##_STEP_WRITE(v);                                                                                                                           \
-      AXIS##2_STEP_WRITE(v);                                                                                                                          \
+  #define DUAL_ENDSTOP_APPLY_STEP(AXIS,v)                                                                                                           \
+    if (performing_homing) {                                                                                                                        \
+      if (AXIS##_HOME_DIR < 0) {                                                                                                                    \
+        if (!(TEST(endstops.old_endstop_bits, AXIS##_MIN) && count_direction[AXIS##_AXIS] < 0) && !LOCKED_##AXIS##_MOTOR) AXIS##_STEP_WRITE(v);     \
+        if (!(TEST(endstops.old_endstop_bits, AXIS##2_MIN) && count_direction[AXIS##_AXIS] < 0) && !LOCKED_##AXIS##2_MOTOR) AXIS##2_STEP_WRITE(v);  \
+      }                                                                                                                                             \
+      else {                                                                                                                                        \
+        if (!(TEST(endstops.old_endstop_bits, AXIS##_MAX) && count_direction[AXIS##_AXIS] > 0) && !LOCKED_##AXIS##_MOTOR) AXIS##_STEP_WRITE(v);     \
+        if (!(TEST(endstops.old_endstop_bits, AXIS##2_MAX) && count_direction[AXIS##_AXIS] > 0) && !LOCKED_##AXIS##2_MOTOR) AXIS##2_STEP_WRITE(v);  \
+      }                                                                                                                                             \
+    }                                                                                                                                               \
+    else {                                                                                                                                          \
+      AXIS##_STEP_WRITE(v);                                                                                                                         \
+      AXIS##2_STEP_WRITE(v);                                                                                                                        \
     }
 #endif
 
@@ -235,8 +251,6 @@ volatile long Stepper::endstops_trigsteps[XYZ];
 #if DISABLED(MIXING_EXTRUDER)
   #define E_APPLY_STEP(v,Q) E_STEP_WRITE(v)
 #endif
-
-
 
 /**
  *         __________________________
@@ -305,6 +319,812 @@ void Stepper::set_directions() {
   extern volatile uint8_t e_hit;
 #endif
 
+#if ENABLED(BEZIER_JERK_CONTROL)
+  /**
+   *   We are using a quintic (fifth-degree) Bézier polynomial for the velocity curve.
+   *  This gives us a "linear pop" velocity curve; with pop being the sixth derivative of position:
+   *  velocity - 1st, acceleration - 2nd, jerk - 3rd, snap - 4th, crackle - 5th, pop - 6th
+   *
+   *  The Bézier curve takes the form:
+   *
+   *  V(t) = P_0 * B_0(t) + P_1 * B_1(t) + P_2 * B_2(t) + P_3 * B_3(t) + P_4 * B_4(t) + P_5 * B_5(t)
+   *
+   *   Where 0 <= t <= 1, and V(t) is the velocity. P_0 through P_5 are the control points, and B_0(t)
+   *  through B_5(t) are the Bernstein basis as follows:
+   *
+   *        B_0(t) =   (1-t)^5        =   -t^5 +  5t^4 - 10t^3 + 10t^2 -  5t   +   1
+   *        B_1(t) =  5(1-t)^4 * t    =   5t^5 - 20t^4 + 30t^3 - 20t^2 +  5t
+   *        B_2(t) = 10(1-t)^3 * t^2  = -10t^5 + 30t^4 - 30t^3 + 10t^2
+   *        B_3(t) = 10(1-t)^2 * t^3  =  10t^5 - 20t^4 + 10t^3
+   *        B_4(t) =  5(1-t)   * t^4  =  -5t^5 +  5t^4
+   *        B_5(t) =             t^5  =    t^5
+   *                                      ^       ^       ^       ^       ^       ^
+   *                                      |       |       |       |       |       |
+   *                                      A       B       C       D       E       F
+   *
+   *   Unfortunately, we cannot use forward-differencing to calculate each position through
+   *  the curve, as Marlin uses variable timer periods. So, we require a formula of the form:
+   *
+   *        V_f(t) = A*t^5 + B*t^4 + C*t^3 + D*t^2 + E*t + F
+   *
+   *   Looking at the above B_0(t) through B_5(t) expanded forms, if we take the coefficients of t^5
+   *  through t of the Bézier form of V(t), we can determine that:
+   *
+   *        A =    -P_0 +  5*P_1 - 10*P_2 + 10*P_3 -  5*P_4 +  P_5
+   *        B =   5*P_0 - 20*P_1 + 30*P_2 - 20*P_3 +  5*P_4
+   *        C = -10*P_0 + 30*P_1 - 30*P_2 + 10*P_3
+   *        D =  10*P_0 - 20*P_1 + 10*P_2
+   *        E = - 5*P_0 +  5*P_1
+   *        F =     P_0
+   *
+   *   Now, since we will (currently) *always* want the initial acceleration and jerk values to be 0,
+   *  We set P_i = P_0 = P_1 = P_2 (initial velocity), and P_t = P_3 = P_4 = P_5 (target velocity),
+   *  which, after simplification, resolves to:
+   *
+   *        A = - 6*P_i +  6*P_t =  6*(P_t - P_i)
+   *        B =  15*P_i - 15*P_t = 15*(P_i - P_t)
+   *        C = -10*P_i + 10*P_t = 10*(P_t - P_i)
+   *        D = 0
+   *        E = 0
+   *        F = P_i
+   *
+   *   As the t is evaluated in non uniform steps here, there is no other way rather than evaluating
+   *  the Bézier curve at each point:
+   *
+   *        V_f(t) = A*t^5 + B*t^4 + C*t^3 + F          [0 <= t <= 1]
+   *
+   *   Floating point arithmetic execution time cost is prohibitive, so we will transform the math to
+   * use fixed point values to be able to evaluate it in realtime. Assuming a maximum of 250000 steps
+   * per second (driver pulses should at least be 2uS hi/2uS lo), and allocating 2 bits to avoid
+   * overflows on the evaluation of the Bézier curve, means we can use
+   *
+   *   t: unsigned Q0.32 (0 <= t < 1) |range 0 to 0xFFFFFFFF unsigned
+   *   A:   signed Q24.7 ,            |range = +/- 250000 * 6 * 128 = +/- 192000000 = 0x0B71B000 | 28 bits + sign
+   *   B:   signed Q24.7 ,            |range = +/- 250000 *15 * 128 = +/- 480000000 = 0x1C9C3800 | 29 bits + sign
+   *   C:   signed Q24.7 ,            |range = +/- 250000 *10 * 128 = +/- 320000000 = 0x1312D000 | 29 bits + sign
+   *   F:   signed Q24.7 ,            |range = +/- 250000     * 128 =      32000000 = 0x01E84800 | 25 bits + sign
+   *
+   *  The trapezoid generator state contains the following information, that we will use to create and evaluate
+   * the Bézier curve:
+   *
+   *  blk->step_event_count [TS] = The total count of steps for this movement. (=distance)
+   *  blk->initial_rate     [VI] = The initial steps per second (=velocity)
+   *  blk->final_rate       [VF] = The ending steps per second  (=velocity)
+   *  and the count of events completed (step_events_completed) [CS] (=distance until now)
+   *
+   *  Note the abbreviations we use in the following formulae are between []s
+   *
+   *  For Any 32bit CPU:
+   *
+   *    At the start of each trapezoid, we calculate the coefficients A,B,C,F and Advance [AV], as follows:
+   *
+   *      A =  6*128*(VF - VI) =  768*(VF - VI)
+   *      B = 15*128*(VI - VF) = 1920*(VI - VF)
+   *      C = 10*128*(VF - VI) = 1280*(VF - VI)
+   *      F =    128*VI        =  128*VI
+   *     AV = (1<<32)/TS      ~= 0xFFFFFFFF / TS (To use ARM UDIV, that is 32 bits) (this is computed at the planner, to offload expensive calculations from the ISR)
+   *
+   *   And for each point, we will evaluate the curve with the following sequence:
+   *
+   *      void lsrs(uint32_t& d, uint32_t s, int cnt) {
+   *        d = s >> cnt;
+   *      }
+   *      void lsls(uint32_t& d, uint32_t s, int cnt) {
+   *        d = s << cnt;
+   *      }
+   *      void lsrs(int32_t& d, uint32_t s, int cnt) {
+   *        d = uint32_t(s) >> cnt;
+   *      }
+   *      void lsls(int32_t& d, uint32_t s, int cnt) {
+   *        d = uint32_t(s) << cnt;
+   *      }
+   *      void umull(uint32_t& rlo, uint32_t& rhi, uint32_t op1, uint32_t op2) {
+   *        uint64_t res = uint64_t(op1) * op2;
+   *        rlo = uint32_t(res & 0xFFFFFFFF);
+   *        rhi = uint32_t((res >> 32) & 0xFFFFFFFF);
+   *      }
+   *      void smlal(int32_t& rlo, int32_t& rhi, int32_t op1, int32_t op2) {
+   *        int64_t mul = int64_t(op1) * op2;
+   *        int64_t s = int64_t(uint32_t(rlo) | ((uint64_t(uint32_t(rhi)) << 32U)));
+   *        mul += s;
+   *        rlo = int32_t(mul & 0xFFFFFFFF);
+   *        rhi = int32_t((mul >> 32) & 0xFFFFFFFF);
+   *      }
+   *      int32_t _eval_bezier_curve_arm(uint32_t curr_step) {
+   *        register uint32_t flo = 0;
+   *        register uint32_t fhi = bezier_AV * curr_step;
+   *        register uint32_t t = fhi;
+   *        register int32_t alo = bezier_F;
+   *        register int32_t ahi = 0;
+   *        register int32_t A = bezier_A;
+   *        register int32_t B = bezier_B;
+   *        register int32_t C = bezier_C;
+   *
+   *        lsrs(ahi, alo, 1);          // a  = F << 31
+   *        lsls(alo, alo, 31);         //
+   *        umull(flo, fhi, fhi, t);    // f *= t
+   *        umull(flo, fhi, fhi, t);    // f>>=32; f*=t
+   *        lsrs(flo, fhi, 1);          //
+   *        smlal(alo, ahi, flo, C);    // a+=(f>>33)*C
+   *        umull(flo, fhi, fhi, t);    // f>>=32; f*=t
+   *        lsrs(flo, fhi, 1);          //
+   *        smlal(alo, ahi, flo, B);    // a+=(f>>33)*B
+   *        umull(flo, fhi, fhi, t);    // f>>=32; f*=t
+   *        lsrs(flo, fhi, 1);          // f>>=33;
+   *        smlal(alo, ahi, flo, A);    // a+=(f>>33)*A;
+   *        lsrs(alo, ahi, 6);          // a>>=38
+   *
+   *        return alo;
+   *      }
+   *
+   *    This will be rewritten in ARM assembly to get peak performance and will take 43 cycles to execute
+   *
+   *  For AVR, we scale precision of coefficients to make it possible to evaluate the Bézier curve in
+   *    realtime: Let's reduce precision as much as possible. After some experimentation we found that:
+   *
+   *    Assume t and AV with 24 bits is enough
+   *       A =  6*(VF - VI)
+   *       B = 15*(VI - VF)
+   *       C = 10*(VF - VI)
+   *       F =     VI
+   *      AV = (1<<24)/TS   (this is computed at the planner, to offload expensive calculations from the ISR)
+   *
+   *     Instead of storing sign for each coefficient, we will store its absolute value,
+   *    and flag the sign of the A coefficient, so we can save to store the sign bit.
+   *     It always holds that sign(A) = - sign(B) = sign(C)
+   *
+   *     So, the resulting range of the coefficients are:
+   *
+   *       t: unsigned (0 <= t < 1) |range 0 to 0xFFFFFF unsigned
+   *       A:   signed Q24 , range = 250000 * 6 = 1500000 = 0x16E360 | 21 bits
+   *       B:   signed Q24 , range = 250000 *15 = 3750000 = 0x393870 | 22 bits
+   *       C:   signed Q24 , range = 250000 *10 = 2500000 = 0x1312D0 | 21 bits
+   *       F:   signed Q24 , range = 250000     =  250000 = 0x0ED090 | 20 bits
+   *
+   *    And for each curve, we estimate its coefficients with:
+   *
+   *      void _calc_bezier_curve_coeffs(int32_t v0, int32_t v1, uint32_t av) {
+   *       // Calculate the Bézier coefficients
+   *       if (v1 < v0) {
+   *         A_negative = true;
+   *         bezier_A = 6 * (v0 - v1);
+   *         bezier_B = 15 * (v0 - v1);
+   *         bezier_C = 10 * (v0 - v1);
+   *       }
+   *       else {
+   *         A_negative = false;
+   *         bezier_A = 6 * (v1 - v0);
+   *         bezier_B = 15 * (v1 - v0);
+   *         bezier_C = 10 * (v1 - v0);
+   *       }
+   *       bezier_F = v0;
+   *      }
+   *
+   *    And for each point, we will evaluate the curve with the following sequence:
+   *
+   *      // unsigned multiplication of 24 bits x 24bits, return upper 16 bits
+   *      void umul24x24to16hi(uint16_t& r, uint24_t op1, uint24_t op2) {
+   *        r = (uint64_t(op1) * op2) >> 8;
+   *      }
+   *      // unsigned multiplication of 16 bits x 16bits, return upper 16 bits
+   *      void umul16x16to16hi(uint16_t& r, uint16_t op1, uint16_t op2) {
+   *        r = (uint32_t(op1) * op2) >> 16;
+   *      }
+   *      // unsigned multiplication of 16 bits x 24bits, return upper 24 bits
+   *      void umul16x24to24hi(uint24_t& r, uint16_t op1, uint24_t op2) {
+   *        r = uint24_t((uint64_t(op1) * op2) >> 16);
+   *      }
+   *
+   *      int32_t _eval_bezier_curve(uint32_t curr_step) {
+   *        // To save computing, the first step is always the initial speed
+   *        if (!curr_step)
+   *          return bezier_F;
+   *
+   *        uint16_t t;
+   *        umul24x24to16hi(t, bezier_AV, curr_step);   // t: Range 0 - 1^16 = 16 bits
+   *        uint16_t f = t;
+   *        umul16x16to16hi(f, f, t);           // Range 16 bits (unsigned)
+   *        umul16x16to16hi(f, f, t);           // Range 16 bits : f = t^3  (unsigned)
+   *        uint24_t acc = bezier_F;          // Range 20 bits (unsigned)
+   *        if (A_negative) {
+   *          uint24_t v;
+   *          umul16x24to24hi(v, f, bezier_C);    // Range 21bits
+   *          acc -= v;
+   *          umul16x16to16hi(f, f, t);         // Range 16 bits : f = t^4  (unsigned)
+   *          umul16x24to24hi(v, f, bezier_B);    // Range 22bits
+   *          acc += v;
+   *          umul16x16to16hi(f, f, t);         // Range 16 bits : f = t^5  (unsigned)
+   *          umul16x24to24hi(v, f, bezier_A);    // Range 21bits + 15 = 36bits (plus sign)
+   *          acc -= v;
+   *        }
+   *        else {
+   *          uint24_t v;
+   *          umul16x24to24hi(v, f, bezier_C);    // Range 21bits
+   *          acc += v;
+   *          umul16x16to16hi(f, f, t);       // Range 16 bits : f = t^4  (unsigned)
+   *          umul16x24to24hi(v, f, bezier_B);    // Range 22bits
+   *          acc -= v;
+   *          umul16x16to16hi(f, f, t);               // Range 16 bits : f = t^5  (unsigned)
+   *          umul16x24to24hi(v, f, bezier_A);    // Range 21bits + 15 = 36bits (plus sign)
+   *          acc += v;
+   *        }
+   *        return acc;
+   *      }
+   *    Those functions will be translated into assembler to get peak performance. coefficient calculations takes 70 cycles,
+   *    Bezier point evaluation takes 150 cycles
+   *
+   */
+
+  #ifdef __AVR__
+
+    // For AVR we use assembly to maximize speed
+    void Stepper::_calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av) {
+
+      // Store advance
+      bezier_AV = av;
+
+      // Calculate the rest of the coefficients
+      register uint8_t r2 = v0 & 0xFF;
+      register uint8_t r3 = (v0 >> 8) & 0xFF;
+      register uint8_t r12 = (v0 >> 16) & 0xFF;
+      register uint8_t r5 = v1 & 0xFF;
+      register uint8_t r6 = (v1 >> 8) & 0xFF;
+      register uint8_t r7 = (v1 >> 16) & 0xFF;
+      register uint8_t r4,r8,r9,r10,r11;
+
+      __asm__ __volatile__(
+        /* Calculate the Bézier coefficients */
+        /*  %10:%1:%0 = v0*/
+        /*  %5:%4:%3 = v1*/
+        /*  %7:%6:%10 = temporary*/
+        /*  %9 = val (must be high register!)*/
+        /*  %10 (must be high register!)*/
+
+        /* Store initial velocity*/
+        " sts bezier_F, %0" "\n\t"
+        " sts bezier_F+1, %1" "\n\t"
+        " sts bezier_F+2, %10" "\n\t"    /* bezier_F = %10:%1:%0 = v0 */
+
+        /* Get delta speed */
+        " ldi %2,-1" "\n\t"              /* %2 = 0xff, means A_negative = true */
+        " clr %8" "\n\t"                 /* %8 = 0 */
+        " sub %0,%3" "\n\t"
+        " sbc %1,%4" "\n\t"
+        " sbc %10,%5" "\n\t"             /*  v0 -= v1, C=1 if result is negative */
+        " brcc 1f" "\n\t"                /* branch if result is positive (C=0), that means v0 >= v1 */
+
+        /*  Result was negative, get the absolute value*/
+        " com %10" "\n\t"
+        " com %1" "\n\t"
+        " neg %0" "\n\t"
+        " sbc %1,%2" "\n\t"
+        " sbc %10,%2" "\n\t"             /* %10:%1:%0 +1  -> %10:%1:%0 = -(v0 - v1) = (v1 - v0) */
+        " clr %2" "\n\t"                 /* %2 = 0, means A_negative = false */
+
+        /*  Store negative flag*/
+        "1:" "\n\t"
+        " sts A_negative, %2" "\n\t"     /* Store negative flag */
+
+        /*  Compute coefficients A,B and C   [20 cycles worst case]*/
+        " ldi %9,6" "\n\t"               /* %9 = 6 */
+        " mul %0,%9" "\n\t"              /* r1:r0 = 6*LO(v0-v1) */
+        " sts bezier_A, r0" "\n\t"
+        " mov %6,r1" "\n\t"
+        " clr %7" "\n\t"                 /* %7:%6:r0 = 6*LO(v0-v1) */
+        " mul %1,%9" "\n\t"              /* r1:r0 = 6*MI(v0-v1) */
+        " add %6,r0" "\n\t"
+        " adc %7,r1" "\n\t"              /* %7:%6:?? += 6*MI(v0-v1) << 8 */
+        " mul %10,%9" "\n\t"             /* r1:r0 = 6*HI(v0-v1) */
+        " add %7,r0" "\n\t"              /* %7:%6:?? += 6*HI(v0-v1) << 16 */
+        " sts bezier_A+1, %6" "\n\t"
+        " sts bezier_A+2, %7" "\n\t"     /* bezier_A = %7:%6:?? = 6*(v0-v1) [35 cycles worst] */
+
+        " ldi %9,15" "\n\t"              /* %9 = 15 */
+        " mul %0,%9" "\n\t"              /* r1:r0 = 5*LO(v0-v1) */
+        " sts bezier_B, r0" "\n\t"
+        " mov %6,r1" "\n\t"
+        " clr %7" "\n\t"                 /* %7:%6:?? = 5*LO(v0-v1) */
+        " mul %1,%9" "\n\t"              /* r1:r0 = 5*MI(v0-v1) */
+        " add %6,r0" "\n\t"
+        " adc %7,r1" "\n\t"              /* %7:%6:?? += 5*MI(v0-v1) << 8 */
+        " mul %10,%9" "\n\t"             /* r1:r0 = 5*HI(v0-v1) */
+        " add %7,r0" "\n\t"              /* %7:%6:?? += 5*HI(v0-v1) << 16 */
+        " sts bezier_B+1, %6" "\n\t"
+        " sts bezier_B+2, %7" "\n\t"     /* bezier_B = %7:%6:?? = 5*(v0-v1) [50 cycles worst] */
+
+        " ldi %9,10" "\n\t"              /* %9 = 10 */
+        " mul %0,%9" "\n\t"              /* r1:r0 = 10*LO(v0-v1) */
+        " sts bezier_C, r0" "\n\t"
+        " mov %6,r1" "\n\t"
+        " clr %7" "\n\t"                 /* %7:%6:?? = 10*LO(v0-v1) */
+        " mul %1,%9" "\n\t"              /* r1:r0 = 10*MI(v0-v1) */
+        " add %6,r0" "\n\t"
+        " adc %7,r1" "\n\t"              /* %7:%6:?? += 10*MI(v0-v1) << 8 */
+        " mul %10,%9" "\n\t"             /* r1:r0 = 10*HI(v0-v1) */
+        " add %7,r0" "\n\t"              /* %7:%6:?? += 10*HI(v0-v1) << 16 */
+        " sts bezier_C+1, %6" "\n\t"
+        " sts bezier_C+2, %7"            /* bezier_C = %7:%6:?? = 10*(v0-v1) [65 cycles worst] */
+        : "+r" (r2),
+          "+d" (r3),
+          "=r" (r4),
+          "+r" (r5),
+          "+r" (r6),
+          "+r" (r7),
+          "=r" (r8),
+          "=r" (r9),
+          "=r" (r10),
+          "=d" (r11),
+          "+r" (r12)
+        :
+        : "r0", "r1", "cc", "memory"
+      );
+    }
+
+    FORCE_INLINE int32_t Stepper::_eval_bezier_curve(const uint32_t curr_step) {
+
+      // If dealing with the first step, save expensive computing and return the initial speed
+      if (!curr_step)
+        return bezier_F;
+
+      register uint8_t r0 = 0; /* Zero register */
+      register uint8_t r2 = (curr_step) & 0xFF;
+      register uint8_t r3 = (curr_step >> 8) & 0xFF;
+      register uint8_t r4 = (curr_step >> 16) & 0xFF;
+      register uint8_t r1,r5,r6,r7,r8,r9,r10,r11; /* Temporary registers */
+
+      __asm__ __volatile(
+        /* umul24x24to16hi(t, bezier_AV, curr_step);  t: Range 0 - 1^16 = 16 bits*/
+        " lds %9,bezier_AV" "\n\t"       /* %9 = LO(AV)*/
+        " mul %9,%2" "\n\t"              /* r1:r0 = LO(bezier_AV)*LO(curr_step)*/
+        " mov %7,r1" "\n\t"              /* %7 = LO(bezier_AV)*LO(curr_step) >> 8*/
+        " clr %8" "\n\t"                 /* %8:%7  = LO(bezier_AV)*LO(curr_step) >> 8*/
+        " lds %10,bezier_AV+1" "\n\t"    /* %10 = MI(AV)*/
+        " mul %10,%2" "\n\t"             /* r1:r0  = MI(bezier_AV)*LO(curr_step)*/
+        " add %7,r0" "\n\t"
+        " adc %8,r1" "\n\t"              /* %8:%7 += MI(bezier_AV)*LO(curr_step)*/
+        " lds r1,bezier_AV+2" "\n\t"     /* r11 = HI(AV)*/
+        " mul r1,%2" "\n\t"              /* r1:r0  = HI(bezier_AV)*LO(curr_step)*/
+        " add %8,r0" "\n\t"              /* %8:%7 += HI(bezier_AV)*LO(curr_step) << 8*/
+        " mul %9,%3" "\n\t"              /* r1:r0 =  LO(bezier_AV)*MI(curr_step)*/
+        " add %7,r0" "\n\t"
+        " adc %8,r1" "\n\t"              /* %8:%7 += LO(bezier_AV)*MI(curr_step)*/
+        " mul %10,%3" "\n\t"             /* r1:r0 =  MI(bezier_AV)*MI(curr_step)*/
+        " add %8,r0" "\n\t"              /* %8:%7 += LO(bezier_AV)*MI(curr_step) << 8*/
+        " mul %9,%4" "\n\t"              /* r1:r0 =  LO(bezier_AV)*HI(curr_step)*/
+        " add %8,r0" "\n\t"              /* %8:%7 += LO(bezier_AV)*HI(curr_step) << 8*/
+        /* %8:%7 = t*/
+
+        /* uint16_t f = t;*/
+        " mov %5,%7" "\n\t"              /* %6:%5 = f*/
+        " mov %6,%8" "\n\t"
+        /* %6:%5 = f*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits (unsigned) [17] */
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %9,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %9, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %9,r0" "\n\t"              /* %9 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %9,r0" "\n\t"              /* %9 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t)) */
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 = */
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits : f = t^3  (unsigned) [17]*/
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %1,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %1, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 =*/
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+        /* [15 +17*2] = [49]*/
+
+        /* %4:%3:%2 will be acc from now on*/
+
+        /* uint24_t acc = bezier_F; / Range 20 bits (unsigned)*/
+        " clr %9" "\n\t"                 /* "decimal place we get for free"*/
+        " lds %2,bezier_F" "\n\t"
+        " lds %3,bezier_F+1" "\n\t"
+        " lds %4,bezier_F+2" "\n\t"      /* %4:%3:%2 = acc*/
+
+        /* if (A_negative) {*/
+        " lds r0,A_negative" "\n\t"
+        " or r0,%0" "\n\t"               /* Is flag signalling negative? */
+        " brne 3f" "\n\t"                /* If yes, Skip next instruction if A was negative*/
+        " rjmp 1f" "\n\t"                /* Otherwise, jump */
+
+        /* uint24_t v; */
+        /* umul16x24to24hi(v, f, bezier_C); / Range 21bits [29] */
+        /* acc -= v; */
+        "3:" "\n\t"
+        " lds %10, bezier_C" "\n\t"      /* %10 = LO(bezier_C)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_C) * LO(f)*/
+        " sub %9,r1" "\n\t"
+        " sbc %2,%0" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(LO(bezier_C) * LO(f))*/
+        " lds %11, bezier_C+1" "\n\t"    /* %11 = MI(bezier_C)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_C) * LO(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_C) * LO(f)*/
+        " lds %1, bezier_C+2" "\n\t"     /* %1 = HI(bezier_C)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_C) * LO(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_C) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_C) * MI(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= LO(bezier_C) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_C) * MI(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_C) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_C) * LO(f)*/
+        " sub %3,r0" "\n\t"
+        " sbc %4,r1" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_C) * LO(f) << 16*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits : f = t^3  (unsigned) [17]*/
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %1,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %1, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 =*/
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+
+        /* umul16x24to24hi(v, f, bezier_B); / Range 22bits [29]*/
+        /* acc += v; */
+        " lds %10, bezier_B" "\n\t"      /* %10 = LO(bezier_B)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_B) * LO(f)*/
+        " add %9,r1" "\n\t"
+        " adc %2,%0" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(LO(bezier_B) * LO(f))*/
+        " lds %11, bezier_B+1" "\n\t"    /* %11 = MI(bezier_B)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_B) * LO(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_B) * LO(f)*/
+        " lds %1, bezier_B+2" "\n\t"     /* %1 = HI(bezier_B)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_B) * LO(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_B) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_B) * MI(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += LO(bezier_B) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_B) * MI(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_B) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_B) * LO(f)*/
+        " add %3,r0" "\n\t"
+        " adc %4,r1" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_B) * LO(f) << 16*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits : f = t^5  (unsigned) [17]*/
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %1,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %1, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 =*/
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+
+        /* umul16x24to24hi(v, f, bezier_A); / Range 21bits [29]*/
+        /* acc -= v; */
+        " lds %10, bezier_A" "\n\t"      /* %10 = LO(bezier_A)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_A) * LO(f)*/
+        " sub %9,r1" "\n\t"
+        " sbc %2,%0" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(LO(bezier_A) * LO(f))*/
+        " lds %11, bezier_A+1" "\n\t"    /* %11 = MI(bezier_A)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_A) * LO(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_A) * LO(f)*/
+        " lds %1, bezier_A+2" "\n\t"     /* %1 = HI(bezier_A)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_A) * LO(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_A) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_A) * MI(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= LO(bezier_A) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_A) * MI(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_A) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_A) * LO(f)*/
+        " sub %3,r0" "\n\t"
+        " sbc %4,r1" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_A) * LO(f) << 16*/
+        " jmp 2f" "\n\t"                 /* Done!*/
+
+        "1:" "\n\t"
+
+        /* uint24_t v; */
+        /* umul16x24to24hi(v, f, bezier_C); / Range 21bits [29]*/
+        /* acc += v; */
+        " lds %10, bezier_C" "\n\t"      /* %10 = LO(bezier_C)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_C) * LO(f)*/
+        " add %9,r1" "\n\t"
+        " adc %2,%0" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(LO(bezier_C) * LO(f))*/
+        " lds %11, bezier_C+1" "\n\t"    /* %11 = MI(bezier_C)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_C) * LO(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_C) * LO(f)*/
+        " lds %1, bezier_C+2" "\n\t"     /* %1 = HI(bezier_C)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_C) * LO(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_C) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_C) * MI(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += LO(bezier_C) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_C) * MI(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_C) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_C) * LO(f)*/
+        " add %3,r0" "\n\t"
+        " adc %4,r1" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_C) * LO(f) << 16*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits : f = t^3  (unsigned) [17]*/
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %1,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %1, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 =*/
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+
+        /* umul16x24to24hi(v, f, bezier_B); / Range 22bits [29]*/
+        /* acc -= v;*/
+        " lds %10, bezier_B" "\n\t"      /* %10 = LO(bezier_B)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_B) * LO(f)*/
+        " sub %9,r1" "\n\t"
+        " sbc %2,%0" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(LO(bezier_B) * LO(f))*/
+        " lds %11, bezier_B+1" "\n\t"    /* %11 = MI(bezier_B)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_B) * LO(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_B) * LO(f)*/
+        " lds %1, bezier_B+2" "\n\t"     /* %1 = HI(bezier_B)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_B) * LO(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_B) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_B) * MI(f)*/
+        " sub %9,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%0" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= LO(bezier_B) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_B) * MI(f)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"
+        " sbc %4,%0" "\n\t"              /* %4:%3:%2:%9 -= MI(bezier_B) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_B) * LO(f)*/
+        " sub %3,r0" "\n\t"
+        " sbc %4,r1" "\n\t"              /* %4:%3:%2:%9 -= HI(bezier_B) * LO(f) << 16*/
+
+        /* umul16x16to16hi(f, f, t); / Range 16 bits : f = t^5  (unsigned) [17]*/
+        " mul %5,%7" "\n\t"              /* r1:r0 = LO(f) * LO(t)*/
+        " mov %1,r1" "\n\t"              /* store MIL(LO(f) * LO(t)) in %1, we need it for rounding*/
+        " clr %10" "\n\t"                /* %10 = 0*/
+        " clr %11" "\n\t"                /* %11 = 0*/
+        " mul %5,%8" "\n\t"              /* r1:r0 = LO(f) * HI(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(LO(f) * HI(t))*/
+        " adc %10,r1" "\n\t"             /* %10 = HI(LO(f) * HI(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%7" "\n\t"              /* r1:r0 = HI(f) * LO(t)*/
+        " add %1,r0" "\n\t"              /* %1 += LO(HI(f) * LO(t))*/
+        " adc %10,r1" "\n\t"             /* %10 += HI(HI(f) * LO(t))*/
+        " adc %11,%0" "\n\t"             /* %11 += carry*/
+        " mul %6,%8" "\n\t"              /* r1:r0 = HI(f) * HI(t)*/
+        " add %10,r0" "\n\t"             /* %10 += LO(HI(f) * HI(t))*/
+        " adc %11,r1" "\n\t"             /* %11 += HI(HI(f) * HI(t))*/
+        " mov %5,%10" "\n\t"             /* %6:%5 =*/
+        " mov %6,%11" "\n\t"             /* f = %10:%11*/
+
+        /* umul16x24to24hi(v, f, bezier_A); / Range 21bits [29]*/
+        /* acc += v; */
+        " lds %10, bezier_A" "\n\t"      /* %10 = LO(bezier_A)*/
+        " mul %10,%5" "\n\t"             /* r1:r0 = LO(bezier_A) * LO(f)*/
+        " add %9,r1" "\n\t"
+        " adc %2,%0" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(LO(bezier_A) * LO(f))*/
+        " lds %11, bezier_A+1" "\n\t"    /* %11 = MI(bezier_A)*/
+        " mul %11,%5" "\n\t"             /* r1:r0 = MI(bezier_A) * LO(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_A) * LO(f)*/
+        " lds %1, bezier_A+2" "\n\t"     /* %1 = HI(bezier_A)*/
+        " mul %1,%5" "\n\t"              /* r1:r0 = MI(bezier_A) * LO(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_A) * LO(f) << 8*/
+        " mul %10,%6" "\n\t"             /* r1:r0 = LO(bezier_A) * MI(f)*/
+        " add %9,r0" "\n\t"
+        " adc %2,r1" "\n\t"
+        " adc %3,%0" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += LO(bezier_A) * MI(f)*/
+        " mul %11,%6" "\n\t"             /* r1:r0 = MI(bezier_A) * MI(f)*/
+        " add %2,r0" "\n\t"
+        " adc %3,r1" "\n\t"
+        " adc %4,%0" "\n\t"              /* %4:%3:%2:%9 += MI(bezier_A) * MI(f) << 8*/
+        " mul %1,%6" "\n\t"              /* r1:r0 = HI(bezier_A) * LO(f)*/
+        " add %3,r0" "\n\t"
+        " adc %4,r1" "\n\t"              /* %4:%3:%2:%9 += HI(bezier_A) * LO(f) << 16*/
+        "2:" "\n\t"
+        " clr __zero_reg__"              /* C runtime expects r1 = __zero_reg__ = 0 */
+        : "+r"(r0),
+          "+r"(r1),
+          "+r"(r2),
+          "+r"(r3),
+          "+r"(r4),
+          "+r"(r5),
+          "+r"(r6),
+          "+r"(r7),
+          "+r"(r8),
+          "+r"(r9),
+          "+r"(r10),
+          "+r"(r11)
+        :
+        :"cc","r0","r1"
+      );
+      return (r2 | (uint16_t(r3) << 8)) | (uint32_t(r4) << 16);
+    }
+
+  #else
+
+    // For all the other 32bit CPUs
+    FORCE_INLINE void Stepper::_calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av) {
+      // Calculate the Bézier coefficients
+      bezier_A =  768 * (v1 - v0);
+      bezier_B = 1920 * (v0 - v1);
+      bezier_C = 1280 * (v1 - v0);
+      bezier_F =  128 * v0;
+      bezier_AV = av;
+    }
+
+    FORCE_INLINE int32_t Stepper::_eval_bezier_curve(const uint32_t curr_step) {
+      #if defined(__ARM__) || defined(__thumb__)
+
+        // For ARM Cortex M3/M4 CPUs, we have the optimized assembler version, that takes 43 cycles to execute
+        register uint32_t flo = 0;
+        register uint32_t fhi = bezier_AV * curr_step;
+        register uint32_t t = fhi;
+        register int32_t alo = bezier_F;
+        register int32_t ahi = 0;
+        register int32_t A = bezier_A;
+        register int32_t B = bezier_B;
+        register int32_t C = bezier_C;
+
+         __asm__ __volatile__(
+          ".syntax unified"                   "\n\t"  // is to prevent CM0,CM1 non-unified syntax
+          " lsrs  %[ahi],%[alo],#1"           "\n\t"  // a  = F << 31      1 cycles
+          " lsls  %[alo],%[alo],#31"          "\n\t"  //                   1 cycles
+          " umull %[flo],%[fhi],%[fhi],%[t]"  "\n\t"  // f *= t            5 cycles [fhi:flo=64bits]
+          " umull %[flo],%[fhi],%[fhi],%[t]"  "\n\t"  // f>>=32; f*=t      5 cycles [fhi:flo=64bits]
+          " lsrs  %[flo],%[fhi],#1"           "\n\t"  //                   1 cycles [31bits]
+          " smlal %[alo],%[ahi],%[flo],%[C]"  "\n\t"  // a+=(f>>33)*C;     5 cycles
+          " umull %[flo],%[fhi],%[fhi],%[t]"  "\n\t"  // f>>=32; f*=t      5 cycles [fhi:flo=64bits]
+          " lsrs  %[flo],%[fhi],#1"           "\n\t"  //                   1 cycles [31bits]
+          " smlal %[alo],%[ahi],%[flo],%[B]"  "\n\t"  // a+=(f>>33)*B;     5 cycles
+          " umull %[flo],%[fhi],%[fhi],%[t]"  "\n\t"  // f>>=32; f*=t      5 cycles [fhi:flo=64bits]
+          " lsrs  %[flo],%[fhi],#1"           "\n\t"  // f>>=33;           1 cycles [31bits]
+          " smlal %[alo],%[ahi],%[flo],%[A]"  "\n\t"  // a+=(f>>33)*A;     5 cycles
+          " lsrs  %[alo],%[ahi],#6"           "\n\t"  // a>>=38            1 cycles
+          : [alo]"+r"( alo ) ,
+            [flo]"+r"( flo ) ,
+            [fhi]"+r"( fhi ) ,
+            [ahi]"+r"( ahi ) ,
+            [A]"+r"( A ) ,  // <== Note: Even if A, B, C, and t registers are INPUT ONLY
+            [B]"+r"( B ) ,  //  GCC does bad optimizations on the code if we list them as
+            [C]"+r"( C ) ,  //  such, breaking this function. So, to avoid that problem,
+            [t]"+r"( t )    //  we list all registers as input-outputs.
+          :
+          : "cc"
+        );
+        return alo;
+
+      #else
+
+        // For non ARM targets, we provide a fallback implementation. Really doubt it
+        // will be useful, unless the processor is fast and 32bit
+
+        uint32_t t = bezier_AV * curr_step;               // t: Range 0 - 1^32 = 32 bits
+        uint64_t f = t;
+        f *= t;                                           // Range 32*2 = 64 bits (unsigned)
+        f >>= 32;                                         // Range 32 bits  (unsigned)
+        f *= t;                                           // Range 32*2 = 64 bits  (unsigned)
+        f >>= 32;                                         // Range 32 bits : f = t^3  (unsigned)
+        int64_t acc = (int64_t) bezier_F << 31;           // Range 63 bits (signed)
+        acc += ((uint32_t) f >> 1) * (int64_t) bezier_C;  // Range 29bits + 31 = 60bits (plus sign)
+        f *= t;                                           // Range 32*2 = 64 bits
+        f >>= 32;                                         // Range 32 bits : f = t^3  (unsigned)
+        acc += ((uint32_t) f >> 1) * (int64_t) bezier_B;  // Range 29bits + 31 = 60bits (plus sign)
+        f *= t;                                           // Range 32*2 = 64 bits
+        f >>= 32;                                         // Range 32 bits : f = t^3  (unsigned)
+        acc += ((uint32_t) f >> 1) * (int64_t) bezier_A;  // Range 28bits + 31 = 59bits (plus sign)
+        acc >>= (31 + 7);                                 // Range 24bits (plus sign)
+        return (int32_t) acc;
+
+      #endif
+    }
+  #endif
+#endif // BEZIER_JERK_CONTROL
+
 /**
  * Stepper Driver Interrupt
  *
@@ -370,12 +1190,8 @@ void Stepper::isr() {
     _NEXT_ISR(ocr_val);
 
     #if DISABLED(LIN_ADVANCE)
-      #ifdef CPU_32_BIT
-        HAL_timer_set_compare(STEP_TIMER_NUM, ocr_val);
-      #else
-        NOLESS(OCR1A, TCNT1 + 16);
-      #endif
-      HAL_ENABLE_ISRs(); // re-enable ISRs
+      HAL_timer_restrain(STEP_TIMER_NUM, STEP_TIMER_MIN_INTERVAL * HAL_TICKS_PER_US);
+      HAL_ENABLE_ISRs();
     #endif
 
     return;
@@ -405,19 +1221,65 @@ void Stepper::isr() {
 
   // If there is no current block, attempt to pop one from the buffer
   if (!current_block) {
+
     // Anything in the buffer?
     if ((current_block = planner.get_current_block())) {
-      trapezoid_generator_reset();
+
+      // Initialize the trapezoid generator from the current block.
+      static int8_t last_extruder = -1;
+
+      #if ENABLED(LIN_ADVANCE)
+        #if E_STEPPERS > 1
+          if (current_block->active_extruder != last_extruder) {
+            current_adv_steps = 0; // If the now active extruder wasn't in use during the last move, its pressure is most likely gone.
+            LA_active_extruder = current_block->active_extruder;
+          }
+        #endif
+
+        if ((use_advance_lead = current_block->use_advance_lead)) {
+          LA_decelerate_after = current_block->decelerate_after;
+          final_adv_steps = current_block->final_adv_steps;
+          max_adv_steps = current_block->max_adv_steps;
+        }
+      #endif
+
+      if (current_block->direction_bits != last_direction_bits || current_block->active_extruder != last_extruder) {
+        last_direction_bits = current_block->direction_bits;
+        last_extruder = current_block->active_extruder;
+        set_directions();
+      }
+
+      // No acceleration / deceleration time elapsed so far
+      acceleration_time = deceleration_time = 0;
+
+      // No step events completed so far
+      step_events_completed = 0;
+
+      // step_rate to timer interval
+      OCR1A_nominal = calc_timer_interval(current_block->nominal_rate);
+
+      // make a note of the number of step loops required at nominal speed
+      step_loops_nominal = step_loops;
+
+      #if DISABLED(BEZIER_JERK_CONTROL)
+        // Set as deceleration point the initial rate of the block
+        acc_step_rate = current_block->initial_rate;
+      #endif
+
+      #if ENABLED(BEZIER_JERK_CONTROL)
+        // Initialize the Bézier speed curve
+        _calc_bezier_curve_coeffs(current_block->initial_rate, current_block->cruise_rate, current_block->acceleration_time_inverse);
+
+        // We have not started the 2nd half of the trapezoid
+        bezier_2nd_half = false;
+      #endif
 
       // Initialize Bresenham counters to 1/2 the ceiling
       counter_X = counter_Y = counter_Z = counter_E = -(current_block->step_event_count >> 1);
-
       #if ENABLED(MIXING_EXTRUDER)
         MIXING_STEPPERS_LOOP(i)
           counter_m[i] = -(current_block->mix_event_count[i] >> 1);
       #endif
-
-      step_events_completed = 0;
 
       #if ENABLED(ENDSTOP_INTERRUPTS_FEATURE)
         e_hit = 2; // Needed for the case an endstop is already triggered before the new move begins.
@@ -425,17 +1287,19 @@ void Stepper::isr() {
       #endif
 
       #if ENABLED(Z_LATE_ENABLE)
+        // If delayed Z enable, postpone move for 1mS
         if (current_block->steps[Z_AXIS] > 0) {
           enable_Z();
           _NEXT_ISR(HAL_STEPPER_TIMER_RATE / 1000); // Run at slow speed - 1 KHz
-          HAL_ENABLE_ISRs(); // re-enable ISRs
+          HAL_ENABLE_ISRs();
           return;
         }
       #endif
     }
     else {
+      // If no more queued moves, postpone next check for 1mS
       _NEXT_ISR(HAL_STEPPER_TIMER_RATE / 1000); // Run at slow speed - 1 KHz
-      HAL_ENABLE_ISRs(); // re-enable ISRs
+      HAL_ENABLE_ISRs();
       return;
     }
   }
@@ -453,48 +1317,27 @@ void Stepper::isr() {
   // Take multiple steps per interrupt (For high speed moves)
   bool all_steps_done = false;
   for (uint8_t i = step_loops; i--;) {
-    #if ENABLED(LIN_ADVANCE)
-
-      counter_E += current_block->steps[E_AXIS];
-      if (counter_E > 0) {
-        counter_E -= current_block->step_event_count;
-        #if DISABLED(MIXING_EXTRUDER)
-          // Don't step E here for mixing extruder
-          count_position[E_AXIS] += count_direction[E_AXIS];
-          motor_direction(E_AXIS) ? --e_steps[TOOL_E_INDEX] : ++e_steps[TOOL_E_INDEX];
-        #endif
-      }
-
-      #if ENABLED(MIXING_EXTRUDER)
-        // Step mixing steppers proportionally
-        const bool dir = motor_direction(E_AXIS);
-        MIXING_STEPPERS_LOOP(j) {
-          counter_m[j] += current_block->steps[E_AXIS];
-          if (counter_m[j] > 0) {
-            counter_m[j] -= current_block->mix_event_count[j];
-            dir ? --e_steps[j] : ++e_steps[j];
-          }
-        }
-      #endif
-
-    #endif // LIN_ADVANCE
 
     #define _COUNTER(AXIS) counter_## AXIS
     #define _APPLY_STEP(AXIS) AXIS ##_APPLY_STEP
     #define _INVERT_STEP_PIN(AXIS) INVERT_## AXIS ##_STEP_PIN
 
     // Advance the Bresenham counter; start a pulse if the axis needs a step
-    #define PULSE_START(AXIS) \
+    #define PULSE_START(AXIS) do{ \
       _COUNTER(AXIS) += current_block->steps[_AXIS(AXIS)]; \
-      if (_COUNTER(AXIS) > 0) { _APPLY_STEP(AXIS)(!_INVERT_STEP_PIN(AXIS),0); }
+      if (_COUNTER(AXIS) > 0) { _APPLY_STEP(AXIS)(!_INVERT_STEP_PIN(AXIS), 0); } \
+    }while(0)
 
-    // Stop an active pulse, reset the Bresenham counter, update the position
-    #define PULSE_STOP(AXIS) \
+    // Advance the Bresenham counter; start a pulse if the axis needs a step
+    #define STEP_TICK(AXIS) do { \
       if (_COUNTER(AXIS) > 0) { \
         _COUNTER(AXIS) -= current_block->step_event_count; \
         count_position[_AXIS(AXIS)] += count_direction[_AXIS(AXIS)]; \
-        _APPLY_STEP(AXIS)(_INVERT_STEP_PIN(AXIS),0); \
-      }
+      } \
+    }while(0)
+
+    // Stop an active pulse, if any
+    #define PULSE_STOP(AXIS) _APPLY_STEP(AXIS)(_INVERT_STEP_PIN(AXIS), 0)
 
     /**
      * Estimate the number of cycles that the stepper logic already takes
@@ -573,8 +1416,29 @@ void Stepper::isr() {
       PULSE_START(Z);
     #endif
 
-    // For non-advance use linear interpolation for E also
-    #if DISABLED(LIN_ADVANCE)
+    #if ENABLED(LIN_ADVANCE)
+      counter_E += current_block->steps[E_AXIS];
+      if (counter_E > 0) {
+        #if DISABLED(MIXING_EXTRUDER)
+          // Don't step E here for mixing extruder
+          motor_direction(E_AXIS) ? --e_steps : ++e_steps;
+        #endif
+      }
+
+      #if ENABLED(MIXING_EXTRUDER)
+        // Step mixing steppers proportionally
+        const bool dir = motor_direction(E_AXIS);
+        MIXING_STEPPERS_LOOP(j) {
+          counter_m[j] += current_block->steps[E_AXIS];
+          if (counter_m[j] > 0) {
+            counter_m[j] -= current_block->mix_event_count[j];
+            dir ? --e_steps[j] : ++e_steps[j];
+          }
+        }
+      #endif
+
+    #else // !LIN_ADVANCE - use linear interpolation for E also
+
       #if ENABLED(MIXING_EXTRUDER)
         // Keep updating the single E axis
         counter_E += current_block->steps[E_AXIS];
@@ -589,6 +1453,18 @@ void Stepper::isr() {
         PULSE_START(E);
       #endif
     #endif // !LIN_ADVANCE
+
+    #if HAS_X_STEP
+      STEP_TICK(X);
+    #endif
+    #if HAS_Y_STEP
+      STEP_TICK(Y);
+    #endif
+    #if HAS_Z_STEP
+      STEP_TICK(Z);
+    #endif
+
+    STEP_TICK(E); // Always tick the single E axis
 
     // For minimum pulse time wait before stopping pulses
     #if EXTRA_CYCLES_XYZE > 20
@@ -610,11 +1486,6 @@ void Stepper::isr() {
 
     #if DISABLED(LIN_ADVANCE)
       #if ENABLED(MIXING_EXTRUDER)
-        // Always step the single E axis
-        if (counter_E > 0) {
-          counter_E -= current_block->step_event_count;
-          count_position[E_AXIS] += count_direction[E_AXIS];
-        }
         MIXING_STEPPERS_LOOP(j) {
           if (counter_m[j] > 0) {
             counter_m[j] -= current_block->mix_event_count[j];
@@ -640,37 +1511,26 @@ void Stepper::isr() {
 
   } // steps_loop
 
-  #if ENABLED(LIN_ADVANCE)
-
-    if (current_block->use_advance_lead) {
-      const int delta_adv_steps = current_estep_rate[TOOL_E_INDEX] - current_adv_steps[TOOL_E_INDEX];
-      current_adv_steps[TOOL_E_INDEX] += delta_adv_steps;
-      #if ENABLED(MIXING_EXTRUDER)
-        // Mixing extruders apply advance lead proportionally
-        MIXING_STEPPERS_LOOP(j)
-          e_steps[j] += delta_adv_steps * current_block->step_event_count / current_block->mix_event_count[j];
-      #else
-        // For most extruders, advance the single E stepper
-        e_steps[TOOL_E_INDEX] += delta_adv_steps;
-      #endif
-    }
-    // If we have esteps to execute, fire the next advance_isr "now"
-    if (e_steps[TOOL_E_INDEX]) nextAdvanceISR = 0;
-
-  #endif // LIN_ADVANCE
-
   // Calculate new timer value
   if (step_events_completed <= (uint32_t)current_block->accelerate_until) {
 
-    #ifdef CPU_32_BIT
-      MultiU32X24toH32(acc_step_rate, acceleration_time, current_block->acceleration_rate);
+    #if ENABLED(BEZIER_JERK_CONTROL)
+      // Get the next speed to use (Jerk limited!)
+      hal_timer_t acc_step_rate =
+        acceleration_time < current_block->acceleration_time
+          ? _eval_bezier_curve(acceleration_time)
+          : current_block->cruise_rate;
     #else
-      MultiU24X32toH16(acc_step_rate, acceleration_time, current_block->acceleration_rate);
-    #endif
-    acc_step_rate += current_block->initial_rate;
+      #ifdef CPU_32_BIT
+        MultiU32X24toH32(acc_step_rate, acceleration_time, current_block->acceleration_rate);
+      #else
+        MultiU24X32toH16(acc_step_rate, acceleration_time, current_block->acceleration_rate);
+      #endif
+      acc_step_rate += current_block->initial_rate;
 
-    // upper limit
-    NOMORE(acc_step_rate, current_block->nominal_rate);
+      // upper limit
+      NOMORE(acc_step_rate, current_block->nominal_rate);
+    #endif
 
     // step_rate to timer interval
     const hal_timer_t interval = calc_timer_interval(acc_step_rate);
@@ -681,81 +1541,89 @@ void Stepper::isr() {
     acceleration_time += interval;
 
     #if ENABLED(LIN_ADVANCE)
-
       if (current_block->use_advance_lead) {
-        #if ENABLED(MIXING_EXTRUDER)
-          MIXING_STEPPERS_LOOP(j)
-            current_estep_rate[j] = ((uint32_t)acc_step_rate * current_block->abs_adv_steps_multiplier8 * current_block->step_event_count / current_block->mix_event_count[j]) >> 17;
-        #else
-          current_estep_rate[TOOL_E_INDEX] = ((uint32_t)acc_step_rate * current_block->abs_adv_steps_multiplier8) >> 17;
-        #endif
+        if (step_events_completed == step_loops || (e_steps && eISR_Rate != current_block->advance_speed)) {
+          nextAdvanceISR = 0; // Wake up eISR on first acceleration loop and fire ISR if final adv_rate is reached
+          eISR_Rate = current_block->advance_speed;
+        }
       }
-      eISR_Rate = adv_rate(e_steps[TOOL_E_INDEX], interval, step_loops);
-
+      else {
+        eISR_Rate = ADV_NEVER;
+        if (e_steps) nextAdvanceISR = 0;
+      }
     #endif // LIN_ADVANCE
   }
   else if (step_events_completed > (uint32_t)current_block->decelerate_after) {
     hal_timer_t step_rate;
-    #ifdef CPU_32_BIT
-      MultiU32X24toH32(step_rate, deceleration_time, current_block->acceleration_rate);
-    #else
-      MultiU24X32toH16(step_rate, deceleration_time, current_block->acceleration_rate);
-    #endif
 
-    if (step_rate < acc_step_rate) { // Still decelerating?
-      step_rate = acc_step_rate - step_rate;
-      NOLESS(step_rate, current_block->final_rate);
-    }
-    else
-      step_rate = current_block->final_rate;
+    #if ENABLED(BEZIER_JERK_CONTROL)
+      // If this is the 1st time we process the 2nd half of the trapezoid...
+      if (!bezier_2nd_half) {
+
+        // Initialize the Bézier speed curve
+        _calc_bezier_curve_coeffs(current_block->cruise_rate, current_block->final_rate, current_block->deceleration_time_inverse);
+        bezier_2nd_half = true;
+      }
+
+      // Calculate the next speed to use
+      step_rate = deceleration_time < current_block->deceleration_time
+        ? _eval_bezier_curve(deceleration_time)
+        : current_block->final_rate;
+    #else
+
+      // Using the old trapezoidal control
+      #ifdef CPU_32_BIT
+        MultiU32X24toH32(step_rate, deceleration_time, current_block->acceleration_rate);
+      #else
+        MultiU24X32toH16(step_rate, deceleration_time, current_block->acceleration_rate);
+      #endif
+
+      if (step_rate < acc_step_rate) { // Still decelerating?
+        step_rate = acc_step_rate - step_rate;
+        NOLESS(step_rate, current_block->final_rate);
+      }
+      else
+        step_rate = current_block->final_rate;
+    #endif
 
     // step_rate to timer interval
     const hal_timer_t interval = calc_timer_interval(step_rate);
 
     SPLIT(interval);  // split step into multiple ISRs if larger than ENDSTOP_NOMINAL_OCR_VAL
     _NEXT_ISR(ocr_val);
+
     deceleration_time += interval;
 
     #if ENABLED(LIN_ADVANCE)
-
       if (current_block->use_advance_lead) {
-        #if ENABLED(MIXING_EXTRUDER)
-          MIXING_STEPPERS_LOOP(j)
-            current_estep_rate[j] = ((uint32_t)step_rate * current_block->abs_adv_steps_multiplier8 * current_block->step_event_count / current_block->mix_event_count[j]) >> 17;
-        #else
-          current_estep_rate[TOOL_E_INDEX] = ((uint32_t)step_rate * current_block->abs_adv_steps_multiplier8) >> 17;
-        #endif
+        if (step_events_completed <= (uint32_t)current_block->decelerate_after + step_loops || (e_steps && eISR_Rate != current_block->advance_speed)) {
+          nextAdvanceISR = 0; // Wake up eISR on first deceleration loop
+          eISR_Rate = current_block->advance_speed;
+        }
       }
-      eISR_Rate = adv_rate(e_steps[TOOL_E_INDEX], interval, step_loops);
-
+      else {
+        eISR_Rate = ADV_NEVER;
+        if (e_steps) nextAdvanceISR = 0;
+      }
     #endif // LIN_ADVANCE
   }
   else {
 
     #if ENABLED(LIN_ADVANCE)
-
-      if (current_block->use_advance_lead)
-        current_estep_rate[TOOL_E_INDEX] = final_estep_rate;
-
-      eISR_Rate = adv_rate(e_steps[TOOL_E_INDEX], OCR1A_nominal, step_loops_nominal);
-
+      // If we have esteps to execute, fire the next advance_isr "now"
+      if (e_steps && eISR_Rate != current_block->advance_speed) nextAdvanceISR = 0;
     #endif
 
     SPLIT(OCR1A_nominal);  // split step into multiple ISRs if larger than ENDSTOP_NOMINAL_OCR_VAL
     _NEXT_ISR(ocr_val);
+
     // ensure we're running at the correct step rate, even if we just came off an acceleration
     step_loops = step_loops_nominal;
   }
 
   #if DISABLED(LIN_ADVANCE)
-    #ifdef CPU_32_BIT
-      // Make sure stepper interrupt does not monopolise CPU by adjusting count to give about 8 us room
-      hal_timer_t stepper_timer_count = HAL_timer_get_compare(STEP_TIMER_NUM),
-                  stepper_timer_current_count = HAL_timer_get_count(STEP_TIMER_NUM) + 8 * HAL_TICKS_PER_US;
-      HAL_timer_set_compare(STEP_TIMER_NUM, max(stepper_timer_count, stepper_timer_current_count));
-    #else
-      NOLESS(OCR1A, TCNT1 + 16);
-    #endif
+    // Make sure stepper ISR doesn't monopolize the CPU
+    HAL_timer_restrain(STEP_TIMER_NUM, STEP_TIMER_MIN_INTERVAL * HAL_TICKS_PER_US);
   #endif
 
   // If current block is finished, reset pointer
@@ -764,7 +1632,7 @@ void Stepper::isr() {
     planner.discard_current_block();
   }
   #if DISABLED(LIN_ADVANCE)
-    HAL_ENABLE_ISRs(); // re-enable ISRs
+    HAL_ENABLE_ISRs();
   #endif
 }
 
@@ -776,60 +1644,81 @@ void Stepper::isr() {
   // Timer interrupt for E. e_steps is set in the main routine;
 
   void Stepper::advance_isr() {
-    nextAdvanceISR = eISR_Rate;
 
-    #if ENABLED(MK2_MULTIPLEXER)
-      // Even-numbered steppers are reversed
-      #define SET_E_STEP_DIR(INDEX) \
-        if (e_steps[INDEX]) E## INDEX ##_DIR_WRITE(e_steps[INDEX] < 0 ? !INVERT_E## INDEX ##_DIR ^ TEST(INDEX, 0) : INVERT_E## INDEX ##_DIR ^ TEST(INDEX, 0))
+    #if ENABLED(MK2_MULTIPLEXER) // For SNMM even-numbered steppers are reversed
+      #define SET_E_STEP_DIR(INDEX) do{ if (e_steps) E0_DIR_WRITE(e_steps < 0 ? !INVERT_E## INDEX ##_DIR ^ TEST(INDEX, 0) : INVERT_E## INDEX ##_DIR ^ TEST(INDEX, 0)); }while(0)
+    #elif ENABLED(DUAL_X_CARRIAGE) || ENABLED(DUAL_NOZZLE_DUPLICATION_MODE)
+      #define SET_E_STEP_DIR(INDEX) do{ if (e_steps) { if (e_steps < 0) REV_E_DIR(); else NORM_E_DIR(); } }while(0)
     #else
-      #define SET_E_STEP_DIR(INDEX) \
-        if (e_steps[INDEX]) E## INDEX ##_DIR_WRITE(e_steps[INDEX] < 0 ? INVERT_E## INDEX ##_DIR : !INVERT_E## INDEX ##_DIR)
+      #define SET_E_STEP_DIR(INDEX) do{ if (e_steps) E## INDEX ##_DIR_WRITE(e_steps < 0 ? INVERT_E## INDEX ##_DIR : !INVERT_E## INDEX ##_DIR); }while(0)
     #endif
 
-    #define START_E_PULSE(INDEX) \
-      if (e_steps[INDEX]) E## INDEX ##_STEP_WRITE(!INVERT_E_STEP_PIN)
+    #if ENABLED(DUAL_X_CARRIAGE) || ENABLED(DUAL_NOZZLE_DUPLICATION_MODE)
+      #define START_E_PULSE(INDEX) do{ if (e_steps) E_STEP_WRITE(!INVERT_E_STEP_PIN); }while(0)
+      #define STOP_E_PULSE(INDEX) do{ if (e_steps) { E_STEP_WRITE(INVERT_E_STEP_PIN); e_steps < 0 ? ++e_steps : --e_steps; } }while(0)
+    #else
+      #define START_E_PULSE(INDEX) do{ if (e_steps) E## INDEX ##_STEP_WRITE(!INVERT_E_STEP_PIN); }while(0)
+      #define STOP_E_PULSE(INDEX) do { if (e_steps) { e_steps < 0 ? ++e_steps : --e_steps; E## INDEX ##_STEP_WRITE(INVERT_E_STEP_PIN); } }while(0)
+    #endif
 
-    #define STOP_E_PULSE(INDEX) \
-      if (e_steps[INDEX]) { \
-        e_steps[INDEX] < 0 ? ++e_steps[INDEX] : --e_steps[INDEX]; \
-        E## INDEX ##_STEP_WRITE(INVERT_E_STEP_PIN); \
+    if (use_advance_lead) {
+      if (step_events_completed > LA_decelerate_after && current_adv_steps > final_adv_steps) {
+        e_steps--;
+        current_adv_steps--;
+        nextAdvanceISR = eISR_Rate;
       }
+      else if (step_events_completed < LA_decelerate_after && current_adv_steps < max_adv_steps) {
+             //step_events_completed <= (uint32_t)current_block->accelerate_until) {
+        e_steps++;
+        current_adv_steps++;
+        nextAdvanceISR = eISR_Rate;
+      }
+      else {
+        nextAdvanceISR = ADV_NEVER;
+        eISR_Rate = ADV_NEVER;
+      }
+    }
+    else
+      nextAdvanceISR = ADV_NEVER;
 
-    SET_E_STEP_DIR(0);
-    #if E_STEPPERS > 1
-      SET_E_STEP_DIR(1);
-      #if E_STEPPERS > 2
-        SET_E_STEP_DIR(2);
-        #if E_STEPPERS > 3
-          SET_E_STEP_DIR(3);
-          #if E_STEPPERS > 4
-            SET_E_STEP_DIR(4);
-          #endif
-        #endif
-      #endif
-    #endif
+    switch (LA_active_extruder) {
+      case 0: SET_E_STEP_DIR(0); break;
+      #if EXTRUDERS > 1
+        case 1: SET_E_STEP_DIR(1); break;
+        #if EXTRUDERS > 2
+          case 2: SET_E_STEP_DIR(2); break;
+          #if EXTRUDERS > 3
+            case 3: SET_E_STEP_DIR(3); break;
+            #if EXTRUDERS > 4
+              case 4: SET_E_STEP_DIR(4); break;
+            #endif // EXTRUDERS > 4
+          #endif // EXTRUDERS > 3
+        #endif // EXTRUDERS > 2
+      #endif // EXTRUDERS > 1
+    }
 
-    // Step all E steppers that have steps
-    for (uint8_t i = step_loops; i--;) {
+    // Step E stepper if we have steps
+    while (e_steps) {
 
       #if EXTRA_CYCLES_E > 20
         hal_timer_t pulse_start = HAL_timer_get_count(PULSE_TIMER_NUM);
       #endif
 
-      START_E_PULSE(0);
-      #if E_STEPPERS > 1
-        START_E_PULSE(1);
-        #if E_STEPPERS > 2
-          START_E_PULSE(2);
-          #if E_STEPPERS > 3
-            START_E_PULSE(3);
-            #if E_STEPPERS > 4
-              START_E_PULSE(4);
-            #endif
-          #endif
-        #endif
-      #endif
+      switch (LA_active_extruder) {
+        case 0: START_E_PULSE(0); break;
+        #if EXTRUDERS > 1
+          case 1: START_E_PULSE(1); break;
+          #if EXTRUDERS > 2
+            case 2: START_E_PULSE(2); break;
+            #if EXTRUDERS > 3
+              case 3: START_E_PULSE(3); break;
+              #if EXTRUDERS > 4
+                case 4: START_E_PULSE(4); break;
+              #endif // EXTRUDERS > 4
+            #endif // EXTRUDERS > 3
+          #endif // EXTRUDERS > 2
+        #endif // EXTRUDERS > 1
+      }
 
       // For minimum pulse time wait before stopping pulses
       #if EXTRA_CYCLES_E > 20
@@ -839,28 +1728,30 @@ void Stepper::isr() {
         DELAY_NOPS(EXTRA_CYCLES_E);
       #endif
 
-      STOP_E_PULSE(0);
-      #if E_STEPPERS > 1
-        STOP_E_PULSE(1);
-        #if E_STEPPERS > 2
-          STOP_E_PULSE(2);
-          #if E_STEPPERS > 3
-            STOP_E_PULSE(3);
-            #if E_STEPPERS > 4
-              STOP_E_PULSE(4);
-            #endif
-          #endif
-        #endif
-      #endif
+      switch (LA_active_extruder) {
+        case 0: STOP_E_PULSE(0); break;
+        #if EXTRUDERS > 1
+          case 1: STOP_E_PULSE(1); break;
+          #if EXTRUDERS > 2
+            case 2: STOP_E_PULSE(2); break;
+            #if EXTRUDERS > 3
+              case 3: STOP_E_PULSE(3); break;
+              #if EXTRUDERS > 4
+                case 4: STOP_E_PULSE(4); break;
+              #endif // EXTRUDERS > 4
+            #endif // EXTRUDERS > 3
+          #endif // EXTRUDERS > 2
+        #endif // EXTRUDERS > 1
+      }
 
       // For minimum pulse time wait before looping
       #if EXTRA_CYCLES_E > 20
-        if (i) while (EXTRA_CYCLES_E > (hal_timer_t)(HAL_timer_get_count(PULSE_TIMER_NUM) - pulse_start) * (PULSE_TIMER_PRESCALE)) { /* nada */ }
+        if (e_steps) while (EXTRA_CYCLES_E > (hal_timer_t)(HAL_timer_get_count(PULSE_TIMER_NUM) - pulse_start) * (PULSE_TIMER_PRESCALE)) { /* nada */ }
       #elif EXTRA_CYCLES_E > 0
-        if (i) DELAY_NOPS(EXTRA_CYCLES_E);
+        if (e_steps) DELAY_NOPS(EXTRA_CYCLES_E);
       #endif
 
-    } // steps_loop
+    } // e_steps
   }
 
   void Stepper::advance_isr_scheduler() {
@@ -894,15 +1785,8 @@ void Stepper::isr() {
       nextMainISR = 0;
     }
 
-    // Don't run the ISR faster than possible
-    #ifdef CPU_32_BIT
-      // Make sure stepper interrupt does not monopolise CPU by adjusting count to give about 8 us room
-      uint32_t stepper_timer_count = HAL_timer_get_compare(STEP_TIMER_NUM),
-               stepper_timer_current_count = HAL_timer_get_count(STEP_TIMER_NUM) + 8 * HAL_TICKS_PER_US;
-      HAL_timer_set_compare(STEP_TIMER_NUM, max(stepper_timer_count, stepper_timer_current_count));
-    #else
-      NOLESS(OCR1A, TCNT1 + 16);
-    #endif
+    // Make sure stepper ISR doesn't monopolize the CPU
+    HAL_timer_restrain(STEP_TIMER_NUM, STEP_TIMER_MIN_INTERVAL * HAL_TICKS_PER_US);
 
     // Restore original ISR settings
     HAL_ENABLE_ISRs();
@@ -929,31 +1813,6 @@ void Stepper::init() {
   // Init Microstepping Pins
   #if HAS_MICROSTEPS
     microstep_init();
-  #endif
-
-  // Init TMC Steppers
-  #if ENABLED(HAVE_TMCDRIVER)
-    tmc_init();
-  #endif
-
-  // Init TMC2130 Steppers
-  #if ENABLED(HAVE_TMC2130)
-    tmc2130_init();
-  #endif
-
-  // Init TMC2208 Steppers
-  #if ENABLED(HAVE_TMC2208)
-    tmc2208_init();
-  #endif
-
-  // TRAMS, TMC2130 and TMC2208 advanced settings
-  #if HAS_TRINAMIC
-    TMC_ADV()
-  #endif
-
-  // Init L6470 Steppers
-  #if ENABLED(HAVE_L6470DRIVER)
-    L6470_init();
   #endif
 
   // Init Dir Pins
@@ -1116,11 +1975,6 @@ void Stepper::init() {
 
   ENABLE_STEPPER_DRIVER_INTERRUPT();
 
-  #if ENABLED(LIN_ADVANCE)
-    for (uint8_t i = 0; i < COUNT(e_steps); i++) e_steps[i] = 0;
-    ZERO(current_adv_steps);
-  #endif
-
   endstops.enable(true); // Start with endstops active. After homing they can be disabled
   sei();
 
@@ -1131,7 +1985,7 @@ void Stepper::init() {
 /**
  * Block until all buffered steps are executed / cleaned
  */
-void Stepper::synchronize() { while (planner.blocks_queued() || cleaning_buffer_counter) idle(); }
+void Stepper::synchronize() { while (planner.has_blocks_queued() || cleaning_buffer_counter) idle(); }
 
 /**
  * Set the stepper positions directly in steps
@@ -1231,7 +2085,7 @@ void Stepper::finish_and_disable() {
 void Stepper::quick_stop() {
   cleaning_buffer_counter = 5000;
   DISABLE_STEPPER_DRIVER_INTERRUPT();
-  while (planner.blocks_queued()) planner.discard_current_block();
+  while (planner.has_blocks_queued()) planner.discard_current_block();
   current_block = NULL;
   ENABLE_STEPPER_DRIVER_INTERRUPT();
   #if ENABLED(ULTRA_LCD)
@@ -1265,21 +2119,21 @@ void Stepper::report_positions() {
              zpos = count_position[Z_AXIS];
   CRITICAL_SECTION_END;
 
-  #if CORE_IS_XY || CORE_IS_XZ || IS_SCARA
+  #if CORE_IS_XY || CORE_IS_XZ || IS_DELTA || IS_SCARA
     SERIAL_PROTOCOLPGM(MSG_COUNT_A);
   #else
     SERIAL_PROTOCOLPGM(MSG_COUNT_X);
   #endif
   SERIAL_PROTOCOL(xpos);
 
-  #if CORE_IS_XY || CORE_IS_YZ || IS_SCARA
+  #if CORE_IS_XY || CORE_IS_YZ || IS_DELTA || IS_SCARA
     SERIAL_PROTOCOLPGM(" B:");
   #else
     SERIAL_PROTOCOLPGM(" Y:");
   #endif
   SERIAL_PROTOCOL(ypos);
 
-  #if CORE_IS_XZ || CORE_IS_YZ
+  #if CORE_IS_XZ || CORE_IS_YZ || IS_DELTA
     SERIAL_PROTOCOLPGM(" C:");
   #else
     SERIAL_PROTOCOLPGM(" Z:");
@@ -1319,16 +2173,16 @@ void Stepper::report_positions() {
     #endif
   #endif
 
-  #define BABYSTEP_AXIS(AXIS, INVERT) {                     \
-      const uint8_t old_dir = _READ_DIR(AXIS);              \
-      _ENABLE(AXIS);                                        \
-      _SAVE_START;                                          \
-      _APPLY_DIR(AXIS, _INVERT_DIR(AXIS)^direction^INVERT); \
-      _PULSE_WAIT;                                          \
-      _APPLY_STEP(AXIS)(!_INVERT_STEP_PIN(AXIS), true);     \
-      _PULSE_WAIT;                                          \
-      _APPLY_STEP(AXIS)(_INVERT_STEP_PIN(AXIS), true);      \
-      _APPLY_DIR(AXIS, old_dir);                            \
+  #define BABYSTEP_AXIS(AXIS, INVERT, DIR) {            \
+      const uint8_t old_dir = _READ_DIR(AXIS);          \
+      _ENABLE(AXIS);                                    \
+      _SAVE_START;                                      \
+      _APPLY_DIR(AXIS, _INVERT_DIR(AXIS)^DIR^INVERT);   \
+      _PULSE_WAIT;                                      \
+      _APPLY_STEP(AXIS)(!_INVERT_STEP_PIN(AXIS), true); \
+      _PULSE_WAIT;                                      \
+      _APPLY_STEP(AXIS)(_INVERT_STEP_PIN(AXIS), true);  \
+      _APPLY_DIR(AXIS, old_dir);                        \
     }
 
   // MUST ONLY BE CALLED BY AN ISR,
@@ -1341,20 +2195,43 @@ void Stepper::report_positions() {
       #if ENABLED(BABYSTEP_XY)
 
         case X_AXIS:
-          BABYSTEP_AXIS(X, false);
+          #if CORE_IS_XY
+            BABYSTEP_AXIS(X, false, direction);
+            BABYSTEP_AXIS(Y, false, direction);
+          #elif CORE_IS_XZ
+            BABYSTEP_AXIS(X, false, direction);
+            BABYSTEP_AXIS(Z, false, direction);
+          #else
+            BABYSTEP_AXIS(X, false, direction);
+          #endif
           break;
 
         case Y_AXIS:
-          BABYSTEP_AXIS(Y, false);
+          #if CORE_IS_XY
+            BABYSTEP_AXIS(X, false, direction);
+            BABYSTEP_AXIS(Y, false, direction^(CORESIGN(1)<0));
+          #elif CORE_IS_YZ
+            BABYSTEP_AXIS(Y, false, direction);
+            BABYSTEP_AXIS(Z, false, direction^(CORESIGN(1)<0));
+          #else
+            BABYSTEP_AXIS(Y, false, direction);
+          #endif
           break;
 
       #endif
 
       case Z_AXIS: {
 
-        #if DISABLED(DELTA)
+        #if CORE_IS_XZ
+          BABYSTEP_AXIS(X, BABYSTEP_INVERT_Z, direction);
+          BABYSTEP_AXIS(Z, BABYSTEP_INVERT_Z, direction^(CORESIGN(1)<0));
 
-          BABYSTEP_AXIS(Z, BABYSTEP_INVERT_Z);
+        #elif CORE_IS_YZ
+          BABYSTEP_AXIS(Y, BABYSTEP_INVERT_Z, direction);
+          BABYSTEP_AXIS(Z, BABYSTEP_INVERT_Z, direction^(CORESIGN(1)<0));
+
+        #elif DISABLED(DELTA)
+          BABYSTEP_AXIS(Z, BABYSTEP_INVERT_Z, direction);
 
         #else // DELTA
 
@@ -1600,13 +2477,18 @@ void Stepper::report_positions() {
   void Stepper::microstep_mode(const uint8_t driver, const uint8_t stepping_mode) {
     switch (stepping_mode) {
       case 1: microstep_ms(driver, MICROSTEP1); break;
-      case 2: microstep_ms(driver, MICROSTEP2); break;
-      case 4: microstep_ms(driver, MICROSTEP4); break;
+      #if ENABLED(HEROIC_STEPPER_DRIVERS)
+        case 128: microstep_ms(driver, MICROSTEP128); break;
+      #else
+        case 2: microstep_ms(driver, MICROSTEP2); break;
+        case 4: microstep_ms(driver, MICROSTEP4); break;
+      #endif
       case 8: microstep_ms(driver, MICROSTEP8); break;
       case 16: microstep_ms(driver, MICROSTEP16); break;
       #if MB(ALLIGATOR)
         case 32: microstep_ms(driver, MICROSTEP32); break;
       #endif
+      default: SERIAL_ERROR_START(); SERIAL_ERRORLNPGM("Microsteps unavailable"); break;
     }
   }
 

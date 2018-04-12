@@ -44,7 +44,7 @@
   #include "../libs/vector_3.h"
 #endif
 
-enum BlockFlagBit {
+enum BlockFlagBit : char {
   // Recalculate trapezoids on entry junction. For optimization.
   BLOCK_BIT_RECALCULATE,
 
@@ -53,9 +53,6 @@ enum BlockFlagBit {
   // from a safe speed (in consideration of jerking from zero speed).
   BLOCK_BIT_NOMINAL_LENGTH,
 
-  // Start from a halt at the start of this block, respecting the maximum allowed jerk.
-  BLOCK_BIT_START_FROM_FULL_HALT,
-
   // The block is busy
   BLOCK_BIT_BUSY,
 
@@ -63,10 +60,9 @@ enum BlockFlagBit {
   BLOCK_BIT_CONTINUED
 };
 
-enum BlockFlag {
+enum BlockFlag : char {
   BLOCK_FLAG_RECALCULATE          = _BV(BLOCK_BIT_RECALCULATE),
   BLOCK_FLAG_NOMINAL_LENGTH       = _BV(BLOCK_BIT_NOMINAL_LENGTH),
-  BLOCK_FLAG_START_FROM_FULL_HALT = _BV(BLOCK_BIT_START_FROM_FULL_HALT),
   BLOCK_FLAG_BUSY                 = _BV(BLOCK_BIT_BUSY),
   BLOCK_FLAG_CONTINUED            = _BV(BLOCK_BIT_CONTINUED)
 };
@@ -94,16 +90,29 @@ typedef struct {
     uint32_t mix_event_count[MIXING_STEPPERS]; // Scaled step_event_count for the mixing steppers
   #endif
 
+  // Settings for the trapezoid generator
   int32_t accelerate_until,                 // The index of the step event on which to stop acceleration
-          decelerate_after,                 // The index of the step event on which to start decelerating
-          acceleration_rate;                // The acceleration rate used for acceleration calculation
+          decelerate_after;                 // The index of the step event on which to start decelerating
+
+  #if ENABLED(BEZIER_JERK_CONTROL)
+    uint32_t cruise_rate;                   // The actual cruise rate to use, between end of the acceleration phase and start of deceleration phase
+    uint32_t acceleration_time,             // Acceleration time and deceleration time in STEP timer counts
+             deceleration_time;
+    uint32_t acceleration_time_inverse,     // Inverse of acceleration and deceleration periods, expressed as integer. Scale depends on CPU being used
+             deceleration_time_inverse;
+  #else
+    int32_t acceleration_rate;              // The acceleration rate used for acceleration calculation
+  #endif
 
   uint8_t direction_bits;                   // The direction bit set for this block (refers to *_DIRECTION_BIT in config.h)
 
   // Advance extrusion
   #if ENABLED(LIN_ADVANCE)
     bool use_advance_lead;
-    uint32_t abs_adv_steps_multiplier8; // Factorised by 2^8 to avoid float
+    uint16_t advance_speed,                 // Timer value for extruder speed offset
+             max_adv_steps,                 // max. advance steps to get cruising speed pressure (not always nominal_speed!)
+             final_adv_steps;               // advance steps due to exit speed
+    float e_D_ratio;
   #endif
 
   // Fields used by the motion planner to manage acceleration
@@ -113,7 +122,6 @@ typedef struct {
         millimeters,                        // The total travel of this block in mm
         acceleration;                       // acceleration mm/sec^2
 
-  // Settings for the trapezoid generator
   uint32_t nominal_rate,                    // The nominal step rate for this block in step_events/sec
            initial_rate,                    // The jerk-adjusted step rate at start of block
            final_rate,                      // The minimal rate at exit
@@ -130,6 +138,8 @@ typedef struct {
   uint32_t segment_time_us;
 
 } block_t;
+
+#define HAS_POSITION_FLOAT (ENABLED(LIN_ADVANCE) || ENABLED(SCARA_FEEDRATE_SCALING))
 
 #define BLOCK_MOD(n) ((n)&(BLOCK_BUFFER_SIZE-1))
 
@@ -195,9 +205,11 @@ class Planner {
     #endif
 
     #if ENABLED(LIN_ADVANCE)
-      static float extruder_advance_k, advance_ed_ratio,
-                   position_float[XYZE],
-                   lin_dist_xy, lin_dist_e;
+      static float extruder_advance_K;
+    #endif
+
+    #if HAS_POSITION_FLOAT
+      static float position_float[XYZE];
     #endif
 
     #if ENABLED(SKEW_CORRECTION)
@@ -418,7 +430,12 @@ class Planner {
      *  extruder    - target extruder
      *  millimeters - the length of the movement, if known
      */
-    static void _buffer_steps(const int32_t (&target)[XYZE], float fr_mm_s, const uint8_t extruder, const float &millimeters = 0.0);
+    static void _buffer_steps(const int32_t (&target)[XYZE]
+      #if HAS_POSITION_FLOAT
+        , const float (&target_float)[XYZE]
+      #endif
+      , float fr_mm_s, const uint8_t extruder, const float &millimeters=0.0
+    );
 
     /**
      * Planner::buffer_segment
@@ -432,7 +449,7 @@ class Planner {
      *  extruder    - target extruder
      *  millimeters - the length of the movement, if known
      */
-    static void buffer_segment(const float &a, const float &b, const float &c, const float &e, const float &fr_mm_s, const uint8_t extruder, const float &millimeters = 0.0);
+    static void buffer_segment(const float &a, const float &b, const float &c, const float &e, const float &fr_mm_s, const uint8_t extruder, const float &millimeters=0.0);
 
     static void _set_position_mm(const float &a, const float &b, const float &c, const float &e);
 
@@ -509,14 +526,14 @@ class Planner {
     /**
      * Does the buffer have any blocks queued?
      */
-    static bool blocks_queued() { return (block_buffer_head != block_buffer_tail); }
+    static bool has_blocks_queued() { return (block_buffer_head != block_buffer_tail); }
 
     /**
      * "Discard" the block and "release" the memory.
      * Called when the current block is no longer needed.
      */
     FORCE_INLINE static void discard_current_block() {
-      if (blocks_queued())
+      if (has_blocks_queued())
         block_buffer_tail = BLOCK_MOD(block_buffer_tail + 1);
     }
 
@@ -525,7 +542,7 @@ class Planner {
      * Called after an interrupted move to throw away the rest of the move.
      */
     FORCE_INLINE static bool discard_continued_block() {
-      const bool discard = blocks_queued() && TEST(block_buffer[block_buffer_tail].flag, BLOCK_BIT_CONTINUED);
+      const bool discard = has_blocks_queued() && TEST(block_buffer[block_buffer_tail].flag, BLOCK_BIT_CONTINUED);
       if (discard) discard_current_block();
       return discard;
     }
@@ -536,7 +553,7 @@ class Planner {
      * WARNING: Called from Stepper ISR context!
      */
     static block_t* get_current_block() {
-      if (blocks_queued()) {
+      if (has_blocks_queued()) {
         block_t * const block = &block_buffer[block_buffer_tail];
 
         // If the block has no trapezoid calculated, it's unsafe to execute.
@@ -630,6 +647,15 @@ class Planner {
     static float max_allowable_speed(const float &accel, const float &target_velocity, const float &distance) {
       return SQRT(sq(target_velocity) - 2 * accel * distance);
     }
+
+    #if ENABLED(BEZIER_JERK_CONTROL)
+      /**
+       * Calculate the speed reached given initial speed, acceleration and distance
+       */
+      static float final_speed(const float &initial_velocity, const float &accel, const float &distance) {
+        return SQRT(sq(initial_velocity) + 2 * accel * distance);
+      }
+    #endif
 
     static void calculate_trapezoid_for_block(block_t* const block, const float &entry_factor, const float &exit_factor);
 

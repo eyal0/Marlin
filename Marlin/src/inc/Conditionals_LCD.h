@@ -386,9 +386,10 @@
 
 #define HAS_DEBUG_MENU ENABLED(LCD_PROGRESS_BAR_TEST)
 
-// MK2 Multiplexer forces SINGLENOZZLE to be enabled
+// MK2 Multiplexer forces SINGLENOZZLE and kills DISABLE_INACTIVE_EXTRUDER
 #if ENABLED(MK2_MULTIPLEXER)
   #define SINGLENOZZLE
+  #undef DISABLE_INACTIVE_EXTRUDER
 #endif
 
 /**
@@ -399,7 +400,6 @@
  *  HOTENDS      - Number of hotends, whether connected or separate
  *  E_STEPPERS   - Number of actual E stepper motors
  *  E_MANUAL     - Number of E steppers for LCD move options
- *  TOOL_E_INDEX - Index to use when getting/setting the tool state
  *
  */
 #if ENABLED(SINGLENOZZLE) || ENABLED(MIXING_EXTRUDER)         // One hotend, one thermistor, no XY offset
@@ -426,24 +426,19 @@
   #if EXTRUDERS > 4
     #define E_STEPPERS    3
     #define E_MANUAL      3
-    #define TOOL_E_INDEX  current_block->active_extruder
   #elif EXTRUDERS > 2
     #define E_STEPPERS    2
     #define E_MANUAL      2
-    #define TOOL_E_INDEX  current_block->active_extruder
   #else
     #define E_STEPPERS    1
-    #define TOOL_E_INDEX  0
   #endif
-  #define E_MANUAL        E_STEPPERS
+  #define E_MANUAL        EXTRUDERS
 #elif ENABLED(MIXING_EXTRUDER)
   #define E_STEPPERS      MIXING_STEPPERS
   #define E_MANUAL        1
-  #define TOOL_E_INDEX    0
 #else
   #define E_STEPPERS      EXTRUDERS
   #define E_MANUAL        EXTRUDERS
-  #define TOOL_E_INDEX    current_block->active_extruder
 #endif
 
 /**
@@ -463,11 +458,11 @@
  * and uses "special" angles for its state.
  */
 #if ENABLED(BLTOUCH)
-  #ifndef Z_ENDSTOP_SERVO_NR
-    #define Z_ENDSTOP_SERVO_NR 0
+  #ifndef Z_PROBE_SERVO_NR
+    #define Z_PROBE_SERVO_NR 0
   #endif
   #ifndef NUM_SERVOS
-    #define NUM_SERVOS (Z_ENDSTOP_SERVO_NR + 1)
+    #define NUM_SERVOS (Z_PROBE_SERVO_NR + 1)
   #endif
   #undef DEACTIVATE_SERVOS_AFTER_MOVE
   #if NUM_SERVOS == 1
@@ -502,12 +497,12 @@
 /**
  * Set a flag for a servo probe
  */
-#define HAS_Z_SERVO_ENDSTOP (defined(Z_ENDSTOP_SERVO_NR) && Z_ENDSTOP_SERVO_NR >= 0)
+#define HAS_Z_SERVO_PROBE (defined(Z_PROBE_SERVO_NR) && Z_PROBE_SERVO_NR >= 0)
 
 /**
  * Set a flag for any enabled probe
  */
-#define PROBE_SELECTED (ENABLED(PROBE_MANUALLY) || ENABLED(FIX_MOUNTED_PROBE) || ENABLED(Z_PROBE_ALLEN_KEY) || HAS_Z_SERVO_ENDSTOP || ENABLED(Z_PROBE_SLED) || ENABLED(SOLENOID_PROBE))
+#define PROBE_SELECTED (ENABLED(PROBE_MANUALLY) || ENABLED(FIX_MOUNTED_PROBE) || ENABLED(Z_PROBE_ALLEN_KEY) || HAS_Z_SERVO_PROBE || ENABLED(Z_PROBE_SLED) || ENABLED(SOLENOID_PROBE))
 
 /**
  * Clear probe pin settings when no probe is selected

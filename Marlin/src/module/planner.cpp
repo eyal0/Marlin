@@ -56,6 +56,10 @@
  *
  * IntersectionDistance[s1_, s2_, a_, d_] := (2 a d - s1^2 + s2^2)/(4 a)
  *
+ * --
+ *
+ * The fast inverse function needed for Bézier interpolation for AVR
+ * was designed, written and tested by Eduardo José Tagle on April/2018
  */
 
 #include "planner.h"
@@ -185,11 +189,11 @@ float Planner::previous_speed[NUM_AXIS],
 #endif
 
 #if ENABLED(LIN_ADVANCE)
-  float Planner::extruder_advance_k, // Initialized by settings.load()
-        Planner::advance_ed_ratio,   // Initialized by settings.load()
-        Planner::position_float[XYZE], // Needed for accurate maths. Steps cannot be used!
-        Planner::lin_dist_xy,
-        Planner::lin_dist_e;
+  float Planner::extruder_advance_K; // Initialized by settings.load()
+#endif
+
+#if HAS_POSITION_FLOAT
+  float Planner::position_float[XYZE]; // Needed for accurate maths. Steps cannot be used!
 #endif
 
 #if ENABLED(ULTRA_LCD)
@@ -205,7 +209,7 @@ Planner::Planner() { init(); }
 void Planner::init() {
   block_buffer_head = block_buffer_tail = 0;
   ZERO(position);
-  #if ENABLED(LIN_ADVANCE)
+  #if HAS_POSITION_FLOAT
     ZERO(position_float);
   #endif
   ZERO(previous_speed);
@@ -214,6 +218,523 @@ void Planner::init() {
     bed_level_matrix.set_to_identity();
   #endif
 }
+
+#if ENABLED(BEZIER_JERK_CONTROL)
+
+  #ifdef __AVR__
+    // This routine, for AVR, returns 0x1000000 / d, but trying to get the inverse as
+    //  fast as possible. A fast converging iterative Newton-Raphson method is able to
+    //  reach full precision in just 1 iteration, and takes 211 cycles (worst case, mean
+    //  case is less, up to 30 cycles for small divisors), instead of the 500 cycles a
+    //  normal division would take.
+    //
+    // Inspired by the following page,
+    //  https://stackoverflow.com/questions/27801397/newton-raphson-division-with-big-integers
+    //
+    // Suppose we want to calculate
+    //  floor(2 ^ k / B)    where B is a positive integer
+    // Then
+    //  B must be <= 2^k, otherwise, the quotient is 0.
+    //
+    // The Newton - Raphson iteration for x = B / 2 ^ k yields:
+    //  q[n + 1] = q[n] * (2 - q[n] * B / 2 ^ k)
+    //
+    // We can rearrange it as:
+    //  q[n + 1] = q[n] * (2 ^ (k + 1) - q[n] * B) >> k
+    //
+    //  Each iteration of this kind requires only integer multiplications
+    // and bit shifts.
+    //  Does it converge to floor(2 ^ k / B) ?:  Not necessarily, but, in
+    // the worst case, it eventually alternates between floor(2 ^ k / B)
+    // and ceiling(2 ^ k / B)).
+    //  So we can use some not-so-clever test to see if we are in this
+    // case, and extract floor(2 ^ k / B).
+    //  Lastly, a simple but important optimization for this approach is to
+    // truncate multiplications (i.e.calculate only the higher bits of the
+    // product) in the early iterations of the Newton - Raphson method.The
+    // reason to do so, is that the results of the early iterations are far
+    // from the quotient, and it doesn't matter to perform them inaccurately.
+    //  Finally, we should pick a good starting value for x. Knowing how many
+    // digits the divisor has, we can estimate it:
+    //
+    // 2^k / x = 2 ^ log2(2^k / x)
+    // 2^k / x = 2 ^(log2(2^k)-log2(x))
+    // 2^k / x = 2 ^(k*log2(2)-log2(x))
+    // 2^k / x = 2 ^ (k-log2(x))
+    // 2^k / x >= 2 ^ (k-floor(log2(x)))
+    // floor(log2(x)) simply is the index of the most significant bit set.
+    //
+    //  If we could improve this estimation even further, then the number of
+    // iterations can be dropped quite a bit, thus saving valuable execution time.
+    //  The paper "Software Integer Division" by Thomas L.Rodeheffer, Microsoft
+    // Research, Silicon Valley,August 26, 2008, that is available at
+    // https://www.microsoft.com/en-us/research/wp-content/uploads/2008/08/tr-2008-141.pdf
+    // suggests , for its integer division algorithm, that using a table to supply the
+    // first 8 bits of precision, and due to the quadratic convergence nature of the
+    // Newton-Raphon iteration, then just 2 iterations should be enough to get
+    // maximum precision of the division.
+    //  If we precompute values of inverses for small denominator values, then
+    // just one Newton-Raphson iteration is enough to reach full precision
+    //  We will use the top 9 bits of the denominator as index.
+    //
+    //  The AVR assembly function is implementing the following C code, included
+    // here as reference:
+    //
+    // uint32_t get_period_inverse(uint32_t d) {
+    //  static const uint8_t inv_tab[256] = {
+    //    255,253,252,250,248,246,244,242,240,238,236,234,233,231,229,227,
+    //    225,224,222,220,218,217,215,213,212,210,208,207,205,203,202,200,
+    //    199,197,195,194,192,191,189,188,186,185,183,182,180,179,178,176,
+    //    175,173,172,170,169,168,166,165,164,162,161,160,158,157,156,154,
+    //    153,152,151,149,148,147,146,144,143,142,141,139,138,137,136,135,
+    //    134,132,131,130,129,128,127,126,125,123,122,121,120,119,118,117,
+    //    116,115,114,113,112,111,110,109,108,107,106,105,104,103,102,101,
+    //    100,99,98,97,96,95,94,93,92,91,90,89,88,88,87,86,
+    //    85,84,83,82,81,80,80,79,78,77,76,75,74,74,73,72,
+    //    71,70,70,69,68,67,66,66,65,64,63,62,62,61,60,59,
+    //    59,58,57,56,56,55,54,53,53,52,51,50,50,49,48,48,
+    //    47,46,46,45,44,43,43,42,41,41,40,39,39,38,37,37,
+    //    36,35,35,34,33,33,32,32,31,30,30,29,28,28,27,27,
+    //    26,25,25,24,24,23,22,22,21,21,20,19,19,18,18,17,
+    //    17,16,15,15,14,14,13,13,12,12,11,10,10,9,9,8,
+    //    8,7,7,6,6,5,5,4,4,3,3,2,2,1,0,0
+    //  };
+    //
+    //  // For small denominators, it is cheaper to directly store the result,
+    //  //  because those denominators would require 2 Newton-Raphson iterations
+    //  //  to converge to the required result precision. For bigger ones, just
+    //  //  ONE Newton-Raphson iteration is enough to get maximum precision!
+    //  static const uint32_t small_inv_tab[111] PROGMEM = {
+    //    16777216,16777216,8388608,5592405,4194304,3355443,2796202,2396745,2097152,1864135,1677721,1525201,1398101,1290555,1198372,1118481,
+    //    1048576,986895,932067,883011,838860,798915,762600,729444,699050,671088,645277,621378,599186,578524,559240,541200,
+    //    524288,508400,493447,479349,466033,453438,441505,430185,419430,409200,399457,390167,381300,372827,364722,356962,
+    //    349525,342392,335544,328965,322638,316551,310689,305040,299593,294337,289262,284359,279620,275036,270600,266305,
+    //    262144,258111,254200,250406,246723,243148,239674,236298,233016,229824,226719,223696,220752,217885,215092,212369,
+    //    209715,207126,204600,202135,199728,197379,195083,192841,190650,188508,186413,184365,182361,180400,178481,176602,
+    //    174762,172960,171196,169466,167772,166111,164482,162885,161319,159783,158275,156796,155344,153919,152520
+    //  };
+    //
+    //  // For small divisors, it is best to directly retrieve the results
+    //  if (d <= 110)
+    //    return pgm_read_dword(&small_inv_tab[d]);
+    //
+    //  // Compute initial estimation of 0x1000000/x -
+    //  // Get most significant bit set on divider
+    //  uint8_t idx = 0;
+    //  uint32_t nr = d;
+    //  if (!(nr & 0xff0000)) {
+    //    nr <<= 8;
+    //    idx += 8;
+    //    if (!(nr & 0xff0000)) {
+    //      nr <<= 8;
+    //      idx += 8;
+    //    }
+    //  }
+    //  if (!(nr & 0xf00000)) {
+    //    nr <<= 4;
+    //    idx += 4;
+    //  }
+    //  if (!(nr & 0xc00000)) {
+    //    nr <<= 2;
+    //    idx += 2;
+    //  }
+    //  if (!(nr & 0x800000)) {
+    //    nr <<= 1;
+    //    idx += 1;
+    //  }
+    //
+    //  // Isolate top 9 bits of the denominator, to be used as index into the initial estimation table
+    //  uint32_t tidx = nr >> 15;         // top 9 bits. bit8 is always set
+    //  uint32_t ie = inv_tab[tidx & 0xFF] + 256; // Get the table value. bit9 is always set
+    //  uint32_t x = idx <= 8 ? (ie >> (8 - idx)) : (ie << (idx - 8)); // Position the estimation at the proper place
+    //
+    //  // Now, refine estimation by newton-raphson. 1 iteration is enough
+    //  x = uint32_t((x * uint64_t((1 << 25) - x * d)) >> 24);
+    //
+    //  // Estimate remainder
+    //  uint32_t r = (1 << 24) - x * d;
+    //
+    //  // Check if we must adjust result
+    //  if (r >= d) x++;
+    //
+    //  // x holds the proper estimation
+    //  return uint32_t(x);
+    // }
+    //
+    static uint32_t get_period_inverse(uint32_t d) {
+
+       static const uint8_t inv_tab[256] PROGMEM = {
+        255,253,252,250,248,246,244,242,240,238,236,234,233,231,229,227,
+        225,224,222,220,218,217,215,213,212,210,208,207,205,203,202,200,
+        199,197,195,194,192,191,189,188,186,185,183,182,180,179,178,176,
+        175,173,172,170,169,168,166,165,164,162,161,160,158,157,156,154,
+        153,152,151,149,148,147,146,144,143,142,141,139,138,137,136,135,
+        134,132,131,130,129,128,127,126,125,123,122,121,120,119,118,117,
+        116,115,114,113,112,111,110,109,108,107,106,105,104,103,102,101,
+        100,99,98,97,96,95,94,93,92,91,90,89,88,88,87,86,
+        85,84,83,82,81,80,80,79,78,77,76,75,74,74,73,72,
+        71,70,70,69,68,67,66,66,65,64,63,62,62,61,60,59,
+        59,58,57,56,56,55,54,53,53,52,51,50,50,49,48,48,
+        47,46,46,45,44,43,43,42,41,41,40,39,39,38,37,37,
+        36,35,35,34,33,33,32,32,31,30,30,29,28,28,27,27,
+        26,25,25,24,24,23,22,22,21,21,20,19,19,18,18,17,
+        17,16,15,15,14,14,13,13,12,12,11,10,10,9,9,8,
+        8,7,7,6,6,5,5,4,4,3,3,2,2,1,0,0
+      };
+
+      // For small denominators, it is cheaper to directly store the result.
+      //  For bigger ones, just ONE Newton-Raphson iteration is enough to get
+      //  maximum precision we need
+      static const uint32_t small_inv_tab[111] PROGMEM = {
+        16777216,16777216,8388608,5592405,4194304,3355443,2796202,2396745,2097152,1864135,1677721,1525201,1398101,1290555,1198372,1118481,
+        1048576,986895,932067,883011,838860,798915,762600,729444,699050,671088,645277,621378,599186,578524,559240,541200,
+        524288,508400,493447,479349,466033,453438,441505,430185,419430,409200,399457,390167,381300,372827,364722,356962,
+        349525,342392,335544,328965,322638,316551,310689,305040,299593,294337,289262,284359,279620,275036,270600,266305,
+        262144,258111,254200,250406,246723,243148,239674,236298,233016,229824,226719,223696,220752,217885,215092,212369,
+        209715,207126,204600,202135,199728,197379,195083,192841,190650,188508,186413,184365,182361,180400,178481,176602,
+        174762,172960,171196,169466,167772,166111,164482,162885,161319,159783,158275,156796,155344,153919,152520
+      };
+
+      // For small divisors, it is best to directly retrieve the results
+      if (d <= 110)
+        return pgm_read_dword(&small_inv_tab[d]);
+
+      register uint8_t r8 = d & 0xFF;
+      register uint8_t r9 = (d >> 8) & 0xFF;
+      register uint8_t r10 = (d >> 16) & 0xFF;
+      register uint8_t r2,r3,r4,r5,r6,r7,r11,r12,r13,r14,r15,r16,r17,r18;
+      register const uint8_t* ptab = inv_tab;
+
+      __asm__ __volatile__(
+        /*  %8:%7:%6 = interval*/
+        /*  r31:r30: MUST be those registers, and they must point to the inv_tab */
+
+        " clr %13" "\n\t"                 /* %13 = 0 */
+
+        /*  Now we must compute */
+        /*   result = 0xFFFFFF / d */
+        /*  %8:%7:%6 = interval*/
+        /*  %16:%15:%14 = nr */
+        /*  %13 = 0*/
+
+        /*  A plain division of 24x24 bits should take 388 cycles to complete. We will */
+        /*  use Newton-Raphson for the calculation, and will strive to get way less cycles*/
+        /*  for the same result - Using C division, it takes 500cycles to complete .*/
+
+        " clr %3" "\n\t"                  /* idx = 0 */
+        " mov %14,%6" "\n\t"
+        " mov %15,%7" "\n\t"
+        " mov %16,%8" "\n\t"              /* nr = interval */
+        " tst %16" "\n\t"                 /* nr & 0xFF0000 == 0 ? */
+        " brne 2f" "\n\t"                 /* No, skip this */
+        " mov %16,%15" "\n\t"
+        " mov %15,%14" "\n\t"             /* nr <<= 8, %14 not needed */
+        " subi %3,-8" "\n\t"              /* idx += 8 */
+        " tst %16" "\n\t"                 /* nr & 0xFF0000 == 0 ? */
+        " brne 2f" "\n\t"                 /* No, skip this */
+        " mov %16,%15" "\n\t"             /* nr <<= 8, %14 not needed */
+        " clr %15" "\n\t"                 /* We clear %14 */
+        " subi %3,-8" "\n\t"              /* idx += 8 */
+
+        /*  here %16 != 0 and %16:%15 contains at least 9 MSBits, or both %16:%15 are 0 */
+        "2:" "\n\t"
+        " cpi %16,0x10" "\n\t"            /* (nr & 0xf00000) == 0 ? */
+        " brcc 3f" "\n\t"                 /* No, skip this */
+        " swap %15" "\n\t"                /* Swap nibbles */
+        " swap %16" "\n\t"                /* Swap nibbles. Low nibble is 0 */
+        " mov %14, %15" "\n\t"
+        " andi %14,0x0f" "\n\t"           /* Isolate low nibble */
+        " andi %15,0xf0" "\n\t"           /* Keep proper nibble in %15 */
+        " or %16, %14" "\n\t"             /* %16:%15 <<= 4 */
+        " subi %3,-4" "\n\t"              /* idx += 4 */
+
+        "3:" "\n\t"
+        " cpi %16,0x40" "\n\t"            /* (nr & 0xc00000) == 0 ? */
+        " brcc 4f" "\n\t"                 /* No, skip this*/
+        " add %15,%15" "\n\t"
+        " adc %16,%16" "\n\t"
+        " add %15,%15" "\n\t"
+        " adc %16,%16" "\n\t"             /* %16:%15 <<= 2 */
+        " subi %3,-2" "\n\t"              /* idx += 2 */
+
+        "4:" "\n\t"
+        " cpi %16,0x80" "\n\t"            /* (nr & 0x800000) == 0 ? */
+        " brcc 5f" "\n\t"                 /* No, skip this */
+        " add %15,%15" "\n\t"
+        " adc %16,%16" "\n\t"             /* %16:%15 <<= 1 */
+        " inc %3" "\n\t"                  /* idx += 1 */
+
+        /*  Now %16:%15 contains its MSBit set to 1, or %16:%15 is == 0. We are now absolutely sure*/
+        /*  we have at least 9 MSBits available to enter the initial estimation table*/
+        "5:" "\n\t"
+        " add %15,%15" "\n\t"
+        " adc %16,%16" "\n\t"             /* %16:%15 = tidx = (nr <<= 1), we lose the top MSBit (always set to 1, %16 is the index into the inverse table)*/
+        " add r30,%16" "\n\t"             /* Only use top 8 bits */
+        " adc r31,%13" "\n\t"             /* r31:r30 = inv_tab + (tidx) */
+        " lpm %14, Z" "\n\t"              /* %14 = inv_tab[tidx] */
+        " ldi %15, 1" "\n\t"              /* %15 = 1  %15:%14 = inv_tab[tidx] + 256 */
+
+        /*  We must scale the approximation to the proper place*/
+        " clr %16" "\n\t"                 /* %16 will always be 0 here */
+        " subi %3,8" "\n\t"               /* idx == 8 ? */
+        " breq 6f" "\n\t"                 /* yes, no need to scale*/
+        " brcs 7f" "\n\t"                 /* If C=1, means idx < 8, result was negative!*/
+
+        /*  idx > 8, now %3 = idx - 8. We must perform a left shift. idx range:[1-8]*/
+        " sbrs %3,0" "\n\t"               /* shift by 1bit position?*/
+        " rjmp 8f" "\n\t"                 /* No*/
+        " add %14,%14" "\n\t"
+        " adc %15,%15" "\n\t"             /* %15:16 <<= 1*/
+        "8:" "\n\t"
+        " sbrs %3,1" "\n\t"               /* shift by 2bit position?*/
+        " rjmp 9f" "\n\t"                 /* No*/
+        " add %14,%14" "\n\t"
+        " adc %15,%15" "\n\t"
+        " add %14,%14" "\n\t"
+        " adc %15,%15" "\n\t"             /* %15:16 <<= 1*/
+        "9:" "\n\t"
+        " sbrs %3,2" "\n\t"               /* shift by 4bits position?*/
+        " rjmp 16f" "\n\t"                /* No*/
+        " swap %15" "\n\t"                /* Swap nibbles. lo nibble of %15 will always be 0*/
+        " swap %14" "\n\t"                /* Swap nibbles*/
+        " mov %12,%14" "\n\t"
+        " andi %12,0x0f" "\n\t"           /* isolate low nibble*/
+        " andi %14,0xf0" "\n\t"           /* and clear it*/
+        " or %15,%12" "\n\t"              /* %15:%16 <<= 4*/
+        "16:" "\n\t"
+        " sbrs %3,3" "\n\t"               /* shift by 8bits position?*/
+        " rjmp 6f" "\n\t"                 /* No, we are done */
+        " mov %16,%15" "\n\t"
+        " mov %15,%14" "\n\t"
+        " clr %14" "\n\t"
+        " jmp 6f" "\n\t"
+
+        /*  idx < 8, now %3 = idx - 8. Get the count of bits */
+        "7:" "\n\t"
+        " neg %3" "\n\t"                  /* %3 = -idx = count of bits to move right. idx range:[1...8]*/
+        " sbrs %3,0" "\n\t"               /* shift by 1 bit position ?*/
+        " rjmp 10f" "\n\t"                /* No, skip it*/
+        " asr %15" "\n\t"                 /* (bit7 is always 0 here)*/
+        " ror %14" "\n\t"
+        "10:" "\n\t"
+        " sbrs %3,1" "\n\t"               /* shift by 2 bit position ?*/
+        " rjmp 11f" "\n\t"                /* No, skip it*/
+        " asr %15" "\n\t"                 /* (bit7 is always 0 here)*/
+        " ror %14" "\n\t"
+        " asr %15" "\n\t"                 /* (bit7 is always 0 here)*/
+        " ror %14" "\n\t"
+        "11:" "\n\t"
+        " sbrs %3,2" "\n\t"               /* shift by 4 bit position ?*/
+        " rjmp 12f" "\n\t"                /* No, skip it*/
+        " swap %15" "\n\t"                /* Swap nibbles*/
+        " andi %14, 0xf0" "\n\t"          /* Lose the lowest nibble*/
+        " swap %14" "\n\t"                /* Swap nibbles. Upper nibble is 0*/
+        " or %14,%15" "\n\t"              /* Pass nibble from upper byte*/
+        " andi %15, 0x0f" "\n\t"          /* And get rid of that nibble*/
+        "12:" "\n\t"
+        " sbrs %3,3" "\n\t"               /* shift by 8 bit position ?*/
+        " rjmp 6f" "\n\t"                 /* No, skip it*/
+        " mov %14,%15" "\n\t"
+        " clr %15" "\n\t"
+        "6:" "\n\t"                       /* %16:%15:%14 = initial estimation of 0x1000000 / d*/
+
+        /*  Now, we must refine the estimation present on %16:%15:%14 using 1 iteration*/
+        /*   of Newton-Raphson. As it has a quadratic convergence, 1 iteration is enough*/
+        /*   to get more than 18bits of precision (the initial table lookup gives 9 bits of*/
+        /*   precision to start from). 18bits of precision is all what is needed here for result */
+
+        /*  %8:%7:%6 = d = interval*/
+        /*  %16:%15:%14 = x = initial estimation of 0x1000000 / d*/
+        /*  %13 = 0*/
+        /*  %3:%2:%1:%0 = working accumulator*/
+
+        /*  Compute 1<<25 - x*d. Result should never exceed 25 bits and should always be positive*/
+        " clr %0" "\n\t"
+        " clr %1" "\n\t"
+        " clr %2" "\n\t"
+        " ldi %3,2" "\n\t"                /* %3:%2:%1:%0 = 0x2000000*/
+        " mul %6,%14" "\n\t"              /* r1:r0 = LO(d) * LO(x)*/
+        " sub %0,r0" "\n\t"
+        " sbc %1,r1" "\n\t"
+        " sbc %2,%13" "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= LO(d) * LO(x)*/
+        " mul %7,%14" "\n\t"              /* r1:r0 = MI(d) * LO(x)*/
+        " sub %1,r0" "\n\t"
+        " sbc %2,r1"  "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= MI(d) * LO(x) << 8*/
+        " mul %8,%14" "\n\t"              /* r1:r0 = HI(d) * LO(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= MIL(d) * LO(x) << 16*/
+        " mul %6,%15" "\n\t"              /* r1:r0 = LO(d) * MI(x)*/
+        " sub %1,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= LO(d) * MI(x) << 8*/
+        " mul %7,%15" "\n\t"              /* r1:r0 = MI(d) * MI(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= MI(d) * MI(x) << 16*/
+        " mul %8,%15" "\n\t"              /* r1:r0 = HI(d) * MI(x)*/
+        " sub %3,r0" "\n\t"               /* %3:%2:%1:%0 -= MIL(d) * MI(x) << 24*/
+        " mul %6,%16" "\n\t"              /* r1:r0 = LO(d) * HI(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= LO(d) * HI(x) << 16*/
+        " mul %7,%16" "\n\t"              /* r1:r0 = MI(d) * HI(x)*/
+        " sub %3,r0" "\n\t"               /* %3:%2:%1:%0 -= MI(d) * HI(x) << 24*/
+        /*  %3:%2:%1:%0 = (1<<25) - x*d     [169]*/
+
+        /*  We need to multiply that result by x, and we are only interested in the top 24bits of that multiply*/
+
+        /*  %16:%15:%14 = x = initial estimation of 0x1000000 / d*/
+        /*  %3:%2:%1:%0 = (1<<25) - x*d = acc*/
+        /*  %13 = 0 */
+
+        /*  result = %11:%10:%9:%5:%4*/
+        " mul %14,%0" "\n\t"              /* r1:r0 = LO(x) * LO(acc)*/
+        " mov %4,r1" "\n\t"
+        " clr %5" "\n\t"
+        " clr %9" "\n\t"
+        " clr %10" "\n\t"
+        " clr %11" "\n\t"                 /* %11:%10:%9:%5:%4 = LO(x) * LO(acc) >> 8*/
+        " mul %15,%0" "\n\t"              /* r1:r0 = MI(x) * LO(acc)*/
+        " add %4,r0" "\n\t"
+        " adc %5,r1" "\n\t"
+        " adc %9,%13" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 += MI(x) * LO(acc) */
+        " mul %16,%0" "\n\t"              /* r1:r0 = HI(x) * LO(acc)*/
+        " add %5,r0" "\n\t"
+        " adc %9,r1" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 += MI(x) * LO(acc) << 8*/
+
+        " mul %14,%1" "\n\t"              /* r1:r0 = LO(x) * MIL(acc)*/
+        " add %4,r0" "\n\t"
+        " adc %5,r1" "\n\t"
+        " adc %9,%13" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 = LO(x) * MIL(acc)*/
+        " mul %15,%1" "\n\t"              /* r1:r0 = MI(x) * MIL(acc)*/
+        " add %5,r0" "\n\t"
+        " adc %9,r1" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 += MI(x) * MIL(acc) << 8*/
+        " mul %16,%1" "\n\t"              /* r1:r0 = HI(x) * MIL(acc)*/
+        " add %9,r0" "\n\t"
+        " adc %10,r1" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 += MI(x) * MIL(acc) << 16*/
+
+        " mul %14,%2" "\n\t"              /* r1:r0 = LO(x) * MIH(acc)*/
+        " add %5,r0" "\n\t"
+        " adc %9,r1" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 = LO(x) * MIH(acc) << 8*/
+        " mul %15,%2" "\n\t"              /* r1:r0 = MI(x) * MIH(acc)*/
+        " add %9,r0" "\n\t"
+        " adc %10,r1" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 += MI(x) * MIH(acc) << 16*/
+        " mul %16,%2" "\n\t"              /* r1:r0 = HI(x) * MIH(acc)*/
+        " add %10,r0" "\n\t"
+        " adc %11,r1" "\n\t"              /* %11:%10:%9:%5:%4 += MI(x) * MIH(acc) << 24*/
+
+        " mul %14,%3" "\n\t"              /* r1:r0 = LO(x) * HI(acc)*/
+        " add %9,r0" "\n\t"
+        " adc %10,r1" "\n\t"
+        " adc %11,%13" "\n\t"             /* %11:%10:%9:%5:%4 = LO(x) * HI(acc) << 16*/
+        " mul %15,%3" "\n\t"              /* r1:r0 = MI(x) * HI(acc)*/
+        " add %10,r0" "\n\t"
+        " adc %11,r1" "\n\t"              /* %11:%10:%9:%5:%4 += MI(x) * HI(acc) << 24*/
+        " mul %16,%3" "\n\t"              /* r1:r0 = HI(x) * HI(acc)*/
+        " add %11,r0" "\n\t"              /* %11:%10:%9:%5:%4 += MI(x) * HI(acc) << 32*/
+
+        /*  At this point, %11:%10:%9 contains the new estimation of x. */
+
+        /*  Finally, we must correct the result. Estimate remainder as*/
+        /*  (1<<24) - x*d*/
+        /*  %11:%10:%9 = x*/
+        /*  %8:%7:%6 = d = interval" "\n\t" /*  */
+        " ldi %3,1" "\n\t"
+        " clr %2" "\n\t"
+        " clr %1" "\n\t"
+        " clr %0" "\n\t"                  /* %3:%2:%1:%0 = 0x1000000*/
+        " mul %6,%9" "\n\t"              /* r1:r0 = LO(d) * LO(x)*/
+        " sub %0,r0" "\n\t"
+        " sbc %1,r1" "\n\t"
+        " sbc %2,%13" "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= LO(d) * LO(x)*/
+        " mul %7,%9" "\n\t"              /* r1:r0 = MI(d) * LO(x)*/
+        " sub %1,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= MI(d) * LO(x) << 8*/
+        " mul %8,%9" "\n\t"              /* r1:r0 = HI(d) * LO(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= MIL(d) * LO(x) << 16*/
+        " mul %6,%10" "\n\t"              /* r1:r0 = LO(d) * MI(x)*/
+        " sub %1,r0" "\n\t"
+        " sbc %2,r1" "\n\t"
+        " sbc %3,%13" "\n\t"              /* %3:%2:%1:%0 -= LO(d) * MI(x) << 8*/
+        " mul %7,%10" "\n\t"              /* r1:r0 = MI(d) * MI(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= MI(d) * MI(x) << 16*/
+        " mul %8,%10" "\n\t"              /* r1:r0 = HI(d) * MI(x)*/
+        " sub %3,r0" "\n\t"               /* %3:%2:%1:%0 -= MIL(d) * MI(x) << 24*/
+        " mul %6,%11" "\n\t"              /* r1:r0 = LO(d) * HI(x)*/
+        " sub %2,r0" "\n\t"
+        " sbc %3,r1" "\n\t"               /* %3:%2:%1:%0 -= LO(d) * HI(x) << 16*/
+        " mul %7,%11" "\n\t"              /* r1:r0 = MI(d) * HI(x)*/
+        " sub %3,r0" "\n\t"               /* %3:%2:%1:%0 -= MI(d) * HI(x) << 24*/
+        /*  %3:%2:%1:%0 = r = (1<<24) - x*d*/
+        /*  %8:%7:%6 = d = interval */
+
+        /*  Perform the final correction*/
+        " sub %0,%6" "\n\t"
+        " sbc %1,%7" "\n\t"
+        " sbc %2,%8" "\n\t"              /* r -= d*/
+        " brcs 14f" "\n\t"                /* if ( r >= d) */
+
+        /*  %11:%10:%9 = x */
+        " ldi %3,1" "\n\t"
+        " add %9,%3" "\n\t"
+        " adc %10,%13" "\n\t"
+        " adc %11,%13" "\n\t"             /* x++*/
+        "14:" "\n\t"
+
+        /*  Estimation is done. %11:%10:%9 = x */
+        " clr __zero_reg__" "\n\t"        /* Make C runtime happy */
+        /*  [211 cycles total]*/
+        : "=r" (r2),
+          "=r" (r3),
+          "=r" (r4),
+          "=d" (r5),
+          "=r" (r6),
+          "=r" (r7),
+          "+r" (r8),
+          "+r" (r9),
+          "+r" (r10),
+          "=d" (r11),
+          "=r" (r12),
+          "=r" (r13),
+          "=d" (r14),
+          "=d" (r15),
+          "=d" (r16),
+          "=d" (r17),
+          "=d" (r18),
+          "+z" (ptab)
+        :
+        : "r0", "r1", "cc"
+      );
+
+      // Return the result
+      return r11 | (uint16_t(r12) << 8) | (uint32_t(r13) << 16);
+    }
+  #else
+    // All the other 32 CPUs can easily perform the inverse using hardware division,
+    // so we don´t need to reduce precision or to use assembly language at all.
+
+    // This routine, for all the other archs, returns 0x100000000 / d ~= 0xFFFFFFFF / d
+    static FORCE_INLINE uint32_t get_period_inverse(uint32_t d) {
+      return 0xFFFFFFFF / d;
+    }
+  #endif
+#endif
 
 #define MINIMAL_STEP_RATE 120
 
@@ -228,6 +749,10 @@ void Planner::calculate_trapezoid_for_block(block_t* const block, const float &e
   // Limit minimal step rate (Otherwise the timer will overflow.)
   NOLESS(initial_rate, MINIMAL_STEP_RATE);
   NOLESS(final_rate, MINIMAL_STEP_RATE);
+
+  #if ENABLED(BEZIER_JERK_CONTROL)
+    uint32_t cruise_rate = initial_rate;
+  #endif
 
   const int32_t accel = block->acceleration_steps_per_s2;
 
@@ -246,16 +771,43 @@ void Planner::calculate_trapezoid_for_block(block_t* const block, const float &e
     NOLESS(accelerate_steps, 0); // Check limits due to numerical round-off
     accelerate_steps = min((uint32_t)accelerate_steps, block->step_event_count);//(We can cast here to unsigned, because the above line ensures that we are above zero)
     plateau_steps = 0;
+
+    #if ENABLED(BEZIER_JERK_CONTROL)
+      // We won't reach the cruising rate. Let's calculate the speed we will reach
+      cruise_rate = final_speed(initial_rate, accel, accelerate_steps);
+    #endif
   }
+  #if ENABLED(BEZIER_JERK_CONTROL)
+    else // We have some plateau time, so the cruise rate will be the nominal rate
+      cruise_rate = block->nominal_rate;
+  #endif
 
   // block->accelerate_until = accelerate_steps;
   // block->decelerate_after = accelerate_steps+plateau_steps;
+
+  #if ENABLED(BEZIER_JERK_CONTROL)
+    // Jerk controlled speed requires to express speed versus time, NOT steps
+    uint32_t acceleration_time = ((float)(cruise_rate - initial_rate) / accel) * HAL_STEPPER_TIMER_RATE,
+             deceleration_time = ((float)(cruise_rate - final_rate) / accel) * HAL_STEPPER_TIMER_RATE;
+
+    // And to offload calculations from the ISR, we also calculate the inverse of those times here
+    uint32_t acceleration_time_inverse = get_period_inverse(acceleration_time);
+    uint32_t deceleration_time_inverse = get_period_inverse(deceleration_time);
+
+  #endif
 
   CRITICAL_SECTION_START;  // Fill variables used by the stepper in a critical section
   if (!TEST(block->flag, BLOCK_BIT_BUSY)) { // Don't update variables if block is busy.
     block->accelerate_until = accelerate_steps;
     block->decelerate_after = accelerate_steps + plateau_steps;
     block->initial_rate = initial_rate;
+    #if ENABLED(BEZIER_JERK_CONTROL)
+      block->acceleration_time = acceleration_time;
+      block->deceleration_time = deceleration_time;
+      block->acceleration_time_inverse = acceleration_time_inverse;
+      block->deceleration_time_inverse = deceleration_time_inverse;
+      block->cruise_rate = cruise_rate;
+    #endif
     block->final_rate = final_rate;
   }
   CRITICAL_SECTION_END;
@@ -292,18 +844,26 @@ void Planner::reverse_pass_kernel(block_t* const current, const block_t * const 
  * Once in reverse and once forward. This implements the reverse pass.
  */
 void Planner::reverse_pass() {
-  if (movesplanned() > 3) {
-    const uint8_t endnr = BLOCK_MOD(block_buffer_tail + 2); // tail is running. tail+1 shouldn't be altered because it's connected to the running block.
-                                                            // tail+2 because the index is not yet advanced when checked
+  if (movesplanned() > 2) {
+    const uint8_t endnr = BLOCK_MOD(block_buffer_tail + 1); // tail is running. tail+1 shouldn't be altered because it's connected to the running block.
     uint8_t blocknr = prev_block_index(block_buffer_head);
     block_t* current = &block_buffer[blocknr];
+
+    // Last/newest block in buffer:
+    const float max_entry_speed = current->max_entry_speed;
+    if (current->entry_speed != max_entry_speed) {
+      // If nominal length true, max junction speed is guaranteed to be reached. Only compute
+      // for max allowable speed if block is decelerating and nominal length is false.
+      current->entry_speed = TEST(current->flag, BLOCK_BIT_NOMINAL_LENGTH)
+        ? max_entry_speed
+        : min(max_entry_speed, max_allowable_speed(-current->acceleration, MINIMUM_PLANNER_SPEED, current->millimeters));
+      SBI(current->flag, BLOCK_BIT_RECALCULATE);
+    }
 
     do {
       const block_t * const next = current;
       blocknr = prev_block_index(blocknr);
       current = &block_buffer[blocknr];
-      if (TEST(current->flag, BLOCK_BIT_START_FROM_FULL_HALT)) // Up to this every block is already optimized.
-        break;
       reverse_pass_kernel(current, next);
     } while (blocknr != endnr);
   }
@@ -364,6 +924,13 @@ void Planner::recalculate_trapezoids() {
         // NOTE: Entry and exit factors always > 0 by all previous logic operations.
         const float nomr = 1.0 / current->nominal_speed;
         calculate_trapezoid_for_block(current, current->entry_speed * nomr, next->entry_speed * nomr);
+        #if ENABLED(LIN_ADVANCE)
+          if (current->use_advance_lead) {
+            const float comp = current->e_D_ratio * extruder_advance_K * axis_steps_per_mm[E_AXIS];
+            current->max_adv_steps = current->nominal_speed * comp;
+            current->final_adv_steps = next->entry_speed * comp;
+          }
+        #endif
         CBI(current->flag, BLOCK_BIT_RECALCULATE); // Reset current only to ensure next trapezoid is computed
       }
     }
@@ -373,6 +940,13 @@ void Planner::recalculate_trapezoids() {
   if (next) {
     const float nomr = 1.0 / next->nominal_speed;
     calculate_trapezoid_for_block(next, next->entry_speed * nomr, (MINIMUM_PLANNER_SPEED) * nomr);
+    #if ENABLED(LIN_ADVANCE)
+      if (next->use_advance_lead) {
+        const float comp = next->e_D_ratio * extruder_advance_K * axis_steps_per_mm[E_AXIS];
+        next->max_adv_steps = next->nominal_speed * comp;
+        next->final_adv_steps = (MINIMUM_PLANNER_SPEED) * comp;
+      }
+    #endif
     CBI(next->flag, BLOCK_BIT_RECALCULATE);
   }
 }
@@ -449,7 +1023,7 @@ void Planner::check_axes_activity() {
     #endif
   #endif
 
-  if (blocks_queued()) {
+  if (has_blocks_queued()) {
 
     #if FAN_COUNT > 0
       for (uint8_t i = 0; i < FAN_COUNT; i++)
@@ -639,12 +1213,11 @@ void Planner::check_axes_activity() {
       rx = dx + X_TILT_FULCRUM;
       ry = dy + Y_TILT_FULCRUM;
 
-    #else
+    #elif HAS_MESH
 
       #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
         const float fade_scaling_factor = fade_scaling_factor_for_z(rz);
-        if (!fade_scaling_factor) return;
-      #elif HAS_MESH
+      #else
         constexpr float fade_scaling_factor = 1.0;
       #endif
 
@@ -653,18 +1226,16 @@ void Planner::check_axes_activity() {
       #endif
 
       rz += (
-        #if ENABLED(AUTO_BED_LEVELING_UBL)
-          ubl.get_z_correction(rx, ry) * fade_scaling_factor
-        #elif ENABLED(MESH_BED_LEVELING)
+        #if ENABLED(MESH_BED_LEVELING)
           mbl.get_z(rx, ry
             #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
               , fade_scaling_factor
             #endif
           )
+        #elif ENABLED(AUTO_BED_LEVELING_UBL)
+          fade_scaling_factor ? fade_scaling_factor * ubl.get_z_correction(rx, ry) : 0.0
         #elif ENABLED(AUTO_BED_LEVELING_BILINEAR)
-          bilinear_z_offset(raw) * fade_scaling_factor
-        #else
-          0
+          fade_scaling_factor ? fade_scaling_factor * bilinear_z_offset(raw) : 0.0
         #endif
       );
 
@@ -673,13 +1244,7 @@ void Planner::check_axes_activity() {
 
   void Planner::unapply_leveling(float raw[XYZ]) {
 
-    #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
-      const float fade_scaling_factor = fade_scaling_factor_for_z(raw[Z_AXIS]);
-    #else
-      constexpr float fade_scaling_factor = 1.0;
-    #endif
-
-    if (leveling_active && fade_scaling_factor) {
+    if (leveling_active) {
 
       #if ABL_PLANAR
 
@@ -693,25 +1258,29 @@ void Planner::check_axes_activity() {
         raw[X_AXIS] = dx + X_TILT_FULCRUM;
         raw[Y_AXIS] = dy + Y_TILT_FULCRUM;
 
-      #else // !ABL_PLANAR
+      #elif HAS_MESH
+
+        #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+          const float fade_scaling_factor = fade_scaling_factor_for_z(raw[Z_AXIS]);
+        #else
+          constexpr float fade_scaling_factor = 1.0;
+        #endif
 
         raw[Z_AXIS] -= (
-          #if ENABLED(AUTO_BED_LEVELING_UBL)
-            ubl.get_z_correction(raw[X_AXIS], raw[Y_AXIS]) * fade_scaling_factor
-          #elif ENABLED(MESH_BED_LEVELING)
+          #if ENABLED(MESH_BED_LEVELING)
             mbl.get_z(raw[X_AXIS], raw[Y_AXIS]
               #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
                 , fade_scaling_factor
               #endif
             )
+          #elif ENABLED(AUTO_BED_LEVELING_UBL)
+            fade_scaling_factor ? fade_scaling_factor * ubl.get_z_correction(raw[X_AXIS], raw[Y_AXIS]) : 0.0
           #elif ENABLED(AUTO_BED_LEVELING_BILINEAR)
-            bilinear_z_offset(raw) * fade_scaling_factor
-          #else
-            0
+            fade_scaling_factor ? fade_scaling_factor * bilinear_z_offset(raw) : 0.0
           #endif
         );
 
-      #endif // !ABL_PLANAR
+      #endif
     }
 
     #if ENABLED(SKEW_CORRECTION)
@@ -730,7 +1299,12 @@ void Planner::check_axes_activity() {
  *  fr_mm_s     - (target) speed of the move
  *  extruder    - target extruder
  */
-void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const uint8_t extruder, const float &millimeters /*= 0.0*/) {
+void Planner::_buffer_steps(const int32_t (&target)[XYZE]
+  #if HAS_POSITION_FLOAT
+    , const float (&target_float)[XYZE]
+  #endif
+  , float fr_mm_s, const uint8_t extruder, const float &millimeters/*=0.0*/
+) {
 
   const int32_t da = target[A_AXIS] - position[A_AXIS],
                 db = target[B_AXIS] - position[B_AXIS],
@@ -751,13 +1325,14 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
     SERIAL_ECHOLNPGM(" steps)");
   //*/
 
-  // If LIN_ADVANCE is disabled then do E move prevention with integers
-  // Otherwise it's done in _buffer_segment.
-  #if DISABLED(LIN_ADVANCE) && (ENABLED(PREVENT_COLD_EXTRUSION) || ENABLED(PREVENT_LENGTHY_EXTRUDE))
+  #if ENABLED(PREVENT_COLD_EXTRUSION) || ENABLED(PREVENT_LENGTHY_EXTRUDE)
     if (de) {
       #if ENABLED(PREVENT_COLD_EXTRUSION)
         if (thermalManager.tooColdToExtrude(extruder)) {
           position[E_AXIS] = target[E_AXIS]; // Behave as if the move really took place, but ignore E part
+          #if HAS_POSITION_FLOAT
+            position_float[E_AXIS] = target_float[E_AXIS];
+          #endif
           de = 0; // no difference
           SERIAL_ECHO_START();
           SERIAL_ECHOLNPGM(MSG_ERR_COLD_EXTRUDE_STOP);
@@ -766,13 +1341,16 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
       #if ENABLED(PREVENT_LENGTHY_EXTRUDE)
         if (labs(de * e_factor[extruder]) > (int32_t)axis_steps_per_mm[E_AXIS_N] * (EXTRUDE_MAXLENGTH)) { // It's not important to get max. extrusion length in a precision < 1mm, so save some cycles and cast to int
           position[E_AXIS] = target[E_AXIS]; // Behave as if the move really took place, but ignore E part
+          #if HAS_POSITION_FLOAT
+            position_float[E_AXIS] = target_float[E_AXIS];
+          #endif
           de = 0; // no difference
           SERIAL_ECHO_START();
           SERIAL_ECHOLNPGM(MSG_ERR_LONG_EXTRUDE_STOP);
         }
       #endif // PREVENT_LENGTHY_EXTRUDE
     }
-  #endif // !LIN_ADVANCE && (PREVENT_COLD_EXTRUSION || PREVENT_LENGTHY_EXTRUDE)
+  #endif // PREVENT_COLD_EXTRUSION || PREVENT_LENGTHY_EXTRUDE
 
   // Compute direction bit-mask for this block
   uint8_t dm = 0;
@@ -834,6 +1412,10 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
     block->steps[X_AXIS] = labs(da);
     block->steps[B_AXIS] = labs(db + dc);
     block->steps[C_AXIS] = labs(db - dc);
+  #elif IS_SCARA
+    block->steps[A_AXIS] = labs(da);
+    block->steps[B_AXIS] = labs(db);
+    block->steps[Z_AXIS] = labs(dc);
   #else
     // default non-h-bot planning
     block->steps[A_AXIS] = labs(da);
@@ -866,10 +1448,10 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
 
   #if ENABLED(AUTO_POWER_CONTROL)
     if (block->steps[X_AXIS] || block->steps[Y_AXIS] || block->steps[Z_AXIS])
-        powerManager.power_on();
+      powerManager.power_on();
   #endif
 
-  //enable active axes
+  // Enable active axes
   #if CORE_IS_XY
     if (block->steps[A_AXIS] || block->steps[B_AXIS]) {
       enable_X();
@@ -900,7 +1482,6 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
 
   // Enable extruder(s)
   if (esteps) {
-
     #if ENABLED(AUTO_POWER_CONTROL)
       powerManager.power_on();
     #endif
@@ -912,16 +1493,8 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
       for (uint8_t i = 0; i < EXTRUDERS; i++)
         if (g_uc_extruder_last_move[i] > 0) g_uc_extruder_last_move[i]--;
 
-      switch(extruder) {
+      switch (extruder) {
         case 0:
-          enable_E0();
-          g_uc_extruder_last_move[0] = (BLOCK_BUFFER_SIZE) * 2;
-          #if ENABLED(DUAL_X_CARRIAGE) || ENABLED(DUAL_NOZZLE_DUPLICATION_MODE)
-            if (extruder_duplication_enabled) {
-              enable_E1();
-              g_uc_extruder_last_move[1] = (BLOCK_BUFFER_SIZE) * 2;
-            }
-          #endif
           #if EXTRUDERS > 1
             DISABLE_IDLE_E(1);
             #if EXTRUDERS > 2
@@ -934,11 +1507,17 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
               #endif // EXTRUDERS > 3
             #endif // EXTRUDERS > 2
           #endif // EXTRUDERS > 1
+          enable_E0();
+          g_uc_extruder_last_move[0] = (BLOCK_BUFFER_SIZE) * 2;
+          #if ENABLED(DUAL_X_CARRIAGE) || ENABLED(DUAL_NOZZLE_DUPLICATION_MODE)
+            if (extruder_duplication_enabled) {
+              enable_E1();
+              g_uc_extruder_last_move[1] = (BLOCK_BUFFER_SIZE) * 2;
+            }
+          #endif
         break;
         #if EXTRUDERS > 1
           case 1:
-            enable_E1();
-            g_uc_extruder_last_move[1] = (BLOCK_BUFFER_SIZE) * 2;
             DISABLE_IDLE_E(0);
             #if EXTRUDERS > 2
               DISABLE_IDLE_E(2);
@@ -949,11 +1528,11 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
                 #endif // EXTRUDERS > 4
               #endif // EXTRUDERS > 3
             #endif // EXTRUDERS > 2
+            enable_E1();
+            g_uc_extruder_last_move[1] = (BLOCK_BUFFER_SIZE) * 2;
           break;
           #if EXTRUDERS > 2
             case 2:
-              enable_E2();
-              g_uc_extruder_last_move[2] = (BLOCK_BUFFER_SIZE) * 2;
               DISABLE_IDLE_E(0);
               DISABLE_IDLE_E(1);
               #if EXTRUDERS > 3
@@ -962,26 +1541,28 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
                   DISABLE_IDLE_E(4);
                 #endif
               #endif
+              enable_E2();
+              g_uc_extruder_last_move[2] = (BLOCK_BUFFER_SIZE) * 2;
             break;
             #if EXTRUDERS > 3
               case 3:
-                enable_E3();
-                g_uc_extruder_last_move[3] = (BLOCK_BUFFER_SIZE) * 2;
                 DISABLE_IDLE_E(0);
                 DISABLE_IDLE_E(1);
                 DISABLE_IDLE_E(2);
                 #if EXTRUDERS > 4
                   DISABLE_IDLE_E(4);
                 #endif
+                enable_E3();
+                g_uc_extruder_last_move[3] = (BLOCK_BUFFER_SIZE) * 2;
               break;
               #if EXTRUDERS > 4
                 case 4:
-                  enable_E4();
-                  g_uc_extruder_last_move[4] = (BLOCK_BUFFER_SIZE) * 2;
                   DISABLE_IDLE_E(0);
                   DISABLE_IDLE_E(1);
                   DISABLE_IDLE_E(2);
                   DISABLE_IDLE_E(3);
+                  enable_E4();
+                  g_uc_extruder_last_move[4] = (BLOCK_BUFFER_SIZE) * 2;
                 break;
               #endif // EXTRUDERS > 4
             #endif // EXTRUDERS > 3
@@ -1189,6 +1770,9 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
   if (!block->steps[A_AXIS] && !block->steps[B_AXIS] && !block->steps[C_AXIS]) {
     // convert to: acceleration steps/sec^2
     accel = CEIL(retract_acceleration * steps_per_mm);
+    #if ENABLED(LIN_ADVANCE)
+      block->use_advance_lead = false;
+    #endif
   }
   else {
     #define LIMIT_ACCEL_LONG(AXIS,INDX) do{ \
@@ -1207,6 +1791,47 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
 
     // Start with print or travel acceleration
     accel = CEIL((esteps ? acceleration : travel_acceleration) * steps_per_mm);
+
+    #if ENABLED(LIN_ADVANCE)
+      /**
+       *
+       * Use LIN_ADVANCE for blocks if all these are true:
+       *
+       * esteps             : This is a print move, because we checked for A, B, C steps before.
+       *
+       * extruder_advance_K : There is an advance factor set.
+       *
+       * de > 0             : Extruder is running forward (e.g., for "Wipe while retracting" (Slic3r) or "Combing" (Cura) moves)
+       */
+      block->use_advance_lead =  esteps
+                              && extruder_advance_K
+                              && de > 0;
+
+      if (block->use_advance_lead) {
+        block->e_D_ratio = (target_float[E_AXIS] - position_float[E_AXIS]) /
+          #if IS_KINEMATIC
+            block->millimeters
+          #else
+            SQRT(sq(target_float[X_AXIS] - position_float[X_AXIS])
+               + sq(target_float[Y_AXIS] - position_float[Y_AXIS])
+               + sq(target_float[Z_AXIS] - position_float[Z_AXIS]))
+          #endif
+        ;
+
+        // Check for unusual high e_D ratio to detect if a retract move was combined with the last print move due to min. steps per segment. Never execute this with advance!
+        // This assumes no one will use a retract length of 0mm < retr_length < ~0.2mm and no one will print 100mm wide lines using 3mm filament or 35mm wide lines using 1.75mm filament.
+        if (block->e_D_ratio > 3.0)
+          block->use_advance_lead = false;
+        else {
+          const uint32_t max_accel_steps_per_s2 = max_jerk[E_AXIS] / (extruder_advance_K * block->e_D_ratio) * steps_per_mm;
+          #if ENABLED(LA_DEBUG)
+            if (accel > max_accel_steps_per_s2)
+              SERIAL_ECHOLNPGM("Acceleration limited.");
+          #endif
+          NOMORE(accel, max_accel_steps_per_s2);
+        }
+      }
+    #endif
 
     #if ENABLED(DISTINCT_E_FACTORS)
       #define ACCEL_IDX extruder
@@ -1230,7 +1855,20 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
   }
   block->acceleration_steps_per_s2 = accel;
   block->acceleration = accel / steps_per_mm;
-  block->acceleration_rate = (long)(accel * 16777216.0 / (HAL_STEPPER_TIMER_RATE)); // 16777216 = <<24
+  #if DISABLED(BEZIER_JERK_CONTROL)
+    block->acceleration_rate = (long)(accel * (4096.0 * 4096.0 / (HAL_STEPPER_TIMER_RATE)));
+  #endif
+  #if ENABLED(LIN_ADVANCE)
+    if (block->use_advance_lead) {
+      block->advance_speed = (HAL_STEPPER_TIMER_RATE) / (extruder_advance_K * block->e_D_ratio * block->acceleration * axis_steps_per_mm[E_AXIS_N]);
+      #if ENABLED(LA_DEBUG)
+        if (extruder_advance_K * block->e_D_ratio * block->acceleration * 2 < block->nominal_speed * block->e_D_ratio)
+          SERIAL_ECHOLNPGM("More than 2 steps per eISR loop executed.");
+        if (block->advance_speed < 200)
+          SERIAL_ECHOLNPGM("eISR running at > 10kHz.");
+      #endif
+    }
+  #endif
 
   // Initial limit on the segment entry velocity
   float vmax_junction;
@@ -1350,17 +1988,11 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
     // Now the transition velocity is known, which maximizes the shared exit / entry velocity while
     // respecting the jerk factors, it may be possible, that applying separate safe exit / entry velocities will achieve faster prints.
     const float vmax_junction_threshold = vmax_junction * 0.99f;
-    if (previous_safe_speed > vmax_junction_threshold && safe_speed > vmax_junction_threshold) {
-      // Not coasting. The machine will stop and start the movements anyway,
-      // better to start the segment from start.
-      SBI(block->flag, BLOCK_BIT_START_FROM_FULL_HALT);
+    if (previous_safe_speed > vmax_junction_threshold && safe_speed > vmax_junction_threshold)
       vmax_junction = safe_speed;
-    }
   }
-  else {
-    SBI(block->flag, BLOCK_BIT_START_FROM_FULL_HALT);
+  else
     vmax_junction = safe_speed;
-  }
 
   // Max entry speed of this block equals the max exit speed of the previous block.
   block->max_entry_speed = vmax_junction;
@@ -1386,41 +2018,15 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
   previous_nominal_speed = block->nominal_speed;
   previous_safe_speed = safe_speed;
 
-  #if ENABLED(LIN_ADVANCE)
-    /**
-     *
-     * Use LIN_ADVANCE for blocks if all these are true:
-     *
-     * esteps && (block->steps[X_AXIS] || block->steps[Y_AXIS]) : This is a print move
-     *
-     * extruder_advance_k                 : There is an advance factor set.
-     *
-     * esteps != block->step_event_count  : A problem occurs if the move before a retract is too small.
-     *                                      In that case, the retract and move will be executed together.
-     *                                      This leads to too many advance steps due to a huge e_acceleration.
-     *                                      The math is good, but we must avoid retract moves with advance!
-     * lin_dist_e > 0                       : Extruder is running forward (e.g., for "Wipe while retracting" (Slic3r) or "Combing" (Cura) moves)
-     */
-    block->use_advance_lead =  esteps && (block->steps[X_AXIS] || block->steps[Y_AXIS])
-                            && extruder_advance_k
-                            && (uint32_t)esteps != block->step_event_count
-                            && lin_dist_e > 0;
-    if (block->use_advance_lead)
-      block->abs_adv_steps_multiplier8 = LROUND(
-        extruder_advance_k
-        * (UNEAR_ZERO(advance_ed_ratio) ? lin_dist_e / lin_dist_xy : advance_ed_ratio) // Use the fixed ratio, if set
-        * (block->nominal_speed / (float)block->nominal_rate)
-        * axis_steps_per_mm[E_AXIS_N] * 256.0
-      );
-
-  #endif // LIN_ADVANCE
-
   // Move buffer head
   block_buffer_head = next_buffer_head;
 
   // Update the position (only when a move was queued)
   static_assert(COUNT(target) > 1, "Parameter to _buffer_steps must be (&target)[XYZE]!");
   COPY(position, target);
+  #if HAS_POSITION_FLOAT
+    COPY(position_float, target_float);
+  #endif
 
   recalculate();
 
@@ -1438,7 +2044,7 @@ void Planner::_buffer_steps(const int32_t (&target)[ABCE], float fr_mm_s, const 
  *  extruder    - target extruder
  *  millimeters - the length of the movement, if known
  */
-void Planner::buffer_segment(const float &a, const float &b, const float &c, const float &e, const float &fr_mm_s, const uint8_t extruder, const float &millimeters /*= 0.0*/) {
+void Planner::buffer_segment(const float &a, const float &b, const float &c, const float &e, const float &fr_mm_s, const uint8_t extruder, const float &millimeters/*=0.0*/) {
   // When changing extruders recalculate steps corresponding to the E position
   #if ENABLED(DISTINCT_E_FACTORS)
     if (last_extruder != extruder && axis_steps_per_mm[E_AXIS_N] != axis_steps_per_mm[E_AXIS + last_extruder]) {
@@ -1455,6 +2061,18 @@ void Planner::buffer_segment(const float &a, const float &b, const float &c, con
     LROUND(c * axis_steps_per_mm[C_AXIS]),
     LROUND(e * axis_steps_per_mm[E_AXIS_N])
   };
+
+  #if HAS_POSITION_FLOAT
+    const float target_float[XYZE] = { a, b, c, e };
+  #endif
+
+  // DRYRUN prevents E moves from taking place
+  if (DEBUGGING(DRYRUN)) {
+    position[E_AXIS] = target[E_AXIS];
+    #if HAS_POSITION_FLOAT
+      position_float[E_AXIS] = e;
+    #endif
+  }
 
   /* <-- add a slash to enable
     SERIAL_ECHOPAIR("  buffer_segment FR:", fr_mm_s);
@@ -1484,85 +2102,48 @@ void Planner::buffer_segment(const float &a, const float &b, const float &c, con
     SERIAL_ECHOLNPGM(")");
   //*/
 
-  // DRYRUN prevents E moves from taking place
-  if (DEBUGGING(DRYRUN)) {
-    position[E_AXIS] = target[E_AXIS];
-    #if ENABLED(LIN_ADVANCE)
-      position_float[E_AXIS] = e;
-    #endif
-  }
-
-  #if ENABLED(LIN_ADVANCE)
-    lin_dist_e = e - position_float[E_AXIS];
-  #endif
-
-  // If LIN_ADVANCE is enabled then do E move prevention with floats
-  // Otherwise it's done in _buffer_steps.
-  #if ENABLED(LIN_ADVANCE) && (ENABLED(PREVENT_COLD_EXTRUSION) || ENABLED(PREVENT_LENGTHY_EXTRUDE))
-    if (lin_dist_e) {
-      #if ENABLED(PREVENT_COLD_EXTRUSION)
-        if (thermalManager.tooColdToExtrude(extruder)) {
-          position_float[E_AXIS] = e; // Behave as if the move really took place, but ignore E part
-          position[E_AXIS] = target[E_AXIS];
-          lin_dist_e = 0;
-          SERIAL_ECHO_START();
-          SERIAL_ECHOLNPGM(MSG_ERR_COLD_EXTRUDE_STOP);
-        }
-      #endif // PREVENT_COLD_EXTRUSION
-      #if ENABLED(PREVENT_LENGTHY_EXTRUDE)
-        if (lin_dist_e * e_factor[extruder] > (EXTRUDE_MAXLENGTH)) {
-          position_float[E_AXIS] = e; // Behave as if the move really took place, but ignore E part
-          position[E_AXIS] = target[E_AXIS];
-          lin_dist_e = 0;
-          SERIAL_ECHO_START();
-          SERIAL_ECHOLNPGM(MSG_ERR_LONG_EXTRUDE_STOP);
-        }
-      #endif // PREVENT_LENGTHY_EXTRUDE
-    }
-  #endif // LIN_ADVANCE && (PREVENT_COLD_EXTRUSION || PREVENT_LENGTHY_EXTRUDE)
-
-  #if ENABLED(LIN_ADVANCE)
-    if (lin_dist_e > 0)
-      lin_dist_xy = HYPOT(a - position_float[X_AXIS], b - position_float[Y_AXIS]);
-  #endif
-
   // Always split the first move into two (if not homing or probing)
-  if (!blocks_queued()) {
+  if (!has_blocks_queued()) {
 
     #define _BETWEEN(A) (position[A##_AXIS] + target[A##_AXIS]) >> 1
     const int32_t between[ABCE] = { _BETWEEN(A), _BETWEEN(B), _BETWEEN(C), _BETWEEN(E) };
+
+    #if HAS_POSITION_FLOAT
+      #define _BETWEEN_F(A) (position_float[A##_AXIS] + target_float[A##_AXIS]) * 0.5
+      const float between_float[ABCE] = { _BETWEEN_F(A), _BETWEEN_F(B), _BETWEEN_F(C), _BETWEEN_F(E) };
+    #endif
+
     DISABLE_STEPPER_DRIVER_INTERRUPT();
 
-    #if ENABLED(LIN_ADVANCE)
-      lin_dist_xy *= 0.5;
-      lin_dist_e *= 0.5;
-    #endif
-
-    _buffer_steps(between, fr_mm_s, extruder, millimeters * 0.5);
-
-    #if ENABLED(LIN_ADVANCE)
-      position_float[X_AXIS] = (position_float[X_AXIS] + a) * 0.5;
-      position_float[Y_AXIS] = (position_float[Y_AXIS] + b) * 0.5;
-      //position_float[Z_AXIS] = (position_float[Z_AXIS] + c) * 0.5;
-      position_float[E_AXIS] = (position_float[E_AXIS] + e) * 0.5;
-    #endif
+    _buffer_steps(between
+      #if HAS_POSITION_FLOAT
+        , between_float
+      #endif
+      , fr_mm_s, extruder, millimeters * 0.5
+    );
 
     const uint8_t next = block_buffer_head;
-    _buffer_steps(target, fr_mm_s, extruder, millimeters * 0.5);
+
+    _buffer_steps(target
+      #if HAS_POSITION_FLOAT
+        , target_float
+      #endif
+      , fr_mm_s, extruder, millimeters * 0.5
+    );
+
     SBI(block_buffer[next].flag, BLOCK_BIT_CONTINUED);
     ENABLE_STEPPER_DRIVER_INTERRUPT();
   }
   else
-    _buffer_steps(target, fr_mm_s, extruder, millimeters);
+    _buffer_steps(target
+      #if HAS_POSITION_FLOAT
+        , target_float
+      #endif
+      , fr_mm_s, extruder, millimeters
+    );
 
   stepper.wake_up();
 
-  #if ENABLED(LIN_ADVANCE)
-    position_float[X_AXIS] = a;
-    position_float[Y_AXIS] = b;
-    //position_float[Z_AXIS] = c;
-    position_float[E_AXIS] = e;
-  #endif
 } // buffer_segment()
 
 /**
@@ -1583,10 +2164,10 @@ void Planner::_set_position_mm(const float &a, const float &b, const float &c, c
                 nb = position[B_AXIS] = LROUND(b * axis_steps_per_mm[B_AXIS]),
                 nc = position[C_AXIS] = LROUND(c * axis_steps_per_mm[C_AXIS]),
                 ne = position[E_AXIS] = LROUND(e * axis_steps_per_mm[_EINDEX]);
-  #if ENABLED(LIN_ADVANCE)
+  #if HAS_POSITION_FLOAT
     position_float[X_AXIS] = a;
     position_float[Y_AXIS] = b;
-    //position_float[Z_AXIS] = c;
+    position_float[Z_AXIS] = c;
     position_float[E_AXIS] = e;
   #endif
   stepper.set_position(na, nb, nc, ne);
@@ -1615,7 +2196,7 @@ void Planner::set_position_mm_kinematic(const float (&cart)[XYZE]) {
 void Planner::sync_from_steppers() {
   LOOP_XYZE(i) {
     position[i] = stepper.position((AxisEnum)i);
-    #if ENABLED(LIN_ADVANCE)
+    #if HAS_POSITION_FLOAT
       position_float[i] = position[i] * steps_to_mm[i
         #if ENABLED(DISTINCT_E_FACTORS)
           + (i == E_AXIS ? active_extruder : 0)
@@ -1636,7 +2217,7 @@ void Planner::set_position_mm(const AxisEnum axis, const float &v) {
     const uint8_t axis_index = axis;
   #endif
   position[axis] = LROUND(v * axis_steps_per_mm[axis_index]);
-  #if ENABLED(LIN_ADVANCE)
+  #if HAS_POSITION_FLOAT
     position_float[axis] = v;
   #endif
   stepper.set_position(axis, v);
@@ -1668,8 +2249,7 @@ void Planner::refresh_positioning() {
 #if ENABLED(AUTOTEMP)
 
   void Planner::autotemp_M104_M109() {
-    autotemp_enabled = parser.seen('F');
-    if (autotemp_enabled) autotemp_factor = parser.value_celsius_diff();
+    if ((autotemp_enabled = parser.seen('F'))) autotemp_factor = parser.value_float();
     if (parser.seen('S')) autotemp_min = parser.value_celsius();
     if (parser.seen('B')) autotemp_max = parser.value_celsius();
   }

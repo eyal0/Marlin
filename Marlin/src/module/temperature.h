@@ -49,7 +49,7 @@
 /**
  * States for ADC reading in the ISR
  */
-enum ADCSensorState {
+enum ADCSensorState : char {
   #if HAS_TEMP_0
     PrepareTemp_0,
     MeasureTemp_0,
@@ -73,6 +73,10 @@ enum ADCSensorState {
   #if HAS_TEMP_BED
     PrepareTemp_BED,
     MeasureTemp_BED,
+  #endif
+  #if HAS_TEMP_CHAMBER
+    PrepareTemp_CHAMBER,
+    MeasureTemp_CHAMBER,
   #endif
   #if ENABLED(FILAMENT_WIDTH_SENSOR)
     Prepare_FILWIDTH,
@@ -113,9 +117,11 @@ class Temperature {
   public:
 
     static float current_temperature[HOTENDS],
+                 current_temperature_chamber,
                  current_temperature_bed;
     static int16_t current_temperature_raw[HOTENDS],
                    target_temperature[HOTENDS],
+                   current_temperature_chamber_raw,
                    current_temperature_bed_raw;
 
     #if ENABLED(AUTO_POWER_E_FANS)
@@ -202,6 +208,11 @@ class Temperature {
 
   private:
 
+    #if EARLY_WATCHDOG
+      // If temperature controller is running
+      static bool inited;
+    #endif
+
     #if ENABLED(TEMP_SENSOR_1_AS_REDUNDANT)
       static uint16_t redundant_temperature_raw;
       static float redundant_temperature;
@@ -239,6 +250,7 @@ class Temperature {
     #endif
 
     static uint16_t raw_temp_value[MAX_EXTRUDERS],
+                    raw_temp_chamber_value,
                     raw_temp_bed_value;
 
     // Init min and max temp with extreme values to prevent false errors during startup
@@ -310,6 +322,9 @@ class Temperature {
     #if HAS_TEMP_BED
       static float analog2tempBed(const int raw);
     #endif
+    #if HAS_TEMP_CHAMBER
+      static float analog2tempChamber(const int raw);
+    #endif
 
     /**
      * Called from the Temperature ISR
@@ -364,6 +379,7 @@ class Temperature {
       return current_temperature[HOTEND_INDEX];
     }
     FORCE_INLINE static float degBed() { return current_temperature_bed; }
+    FORCE_INLINE static float degChamber() { return current_temperature_chamber; }
 
     #if ENABLED(SHOW_TEMP_ADC_VALUES)
       FORCE_INLINE static int16_t rawHotendTemp(const uint8_t e) {
@@ -373,6 +389,7 @@ class Temperature {
         return current_temperature_raw[HOTEND_INDEX];
       }
       FORCE_INLINE static int16_t rawBedTemp() { return current_temperature_bed_raw; }
+      FORCE_INLINE static int16_t rawChamberTemp() { return current_temperature_chamber_raw; }
     #endif
 
     FORCE_INLINE static int16_t degTargetHotend(const uint8_t e) {
@@ -564,7 +581,7 @@ class Temperature {
 
     #endif // HEATER_IDLE_HANDLER
 
-    #if HAS_TEMP_HOTEND || HAS_TEMP_BED
+    #if HAS_TEMP_SENSOR
       static void print_heaterstates(
         #if NUM_SERIAL > 1
           const int8_t port = -1
@@ -610,7 +627,7 @@ class Temperature {
 
     #if ENABLED(THERMAL_PROTECTION_HOTENDS) || HAS_THERMALLY_PROTECTED_BED
 
-      typedef enum TRState { TRInactive, TRFirstHeating, TRStable, TRRunaway } TRstate;
+      typedef enum TRState : char { TRInactive, TRFirstHeating, TRStable, TRRunaway } TRstate;
 
       static void thermal_runaway_protection(TRState * const state, millis_t * const timer, const float &current, const float &target, const int8_t heater_id, const uint16_t period_seconds, const uint16_t hysteresis_degc);
 

@@ -32,18 +32,21 @@
 
 #include "../inc/MarlinConfigPre.h"
 
-enum AdvancedPauseMode {
+enum AdvancedPauseMode : char {
   ADVANCED_PAUSE_MODE_PAUSE_PRINT,
   ADVANCED_PAUSE_MODE_LOAD_FILAMENT,
   ADVANCED_PAUSE_MODE_UNLOAD_FILAMENT
 };
 
-enum AdvancedPauseMessage {
+enum AdvancedPauseMessage : char {
   ADVANCED_PAUSE_MESSAGE_INIT,
   ADVANCED_PAUSE_MESSAGE_UNLOAD,
   ADVANCED_PAUSE_MESSAGE_INSERT,
   ADVANCED_PAUSE_MESSAGE_LOAD,
   ADVANCED_PAUSE_MESSAGE_PURGE,
+  #if ENABLED(ADVANCED_PAUSE_CONTINUOUS_PURGE)
+    ADVANCED_PAUSE_MESSAGE_CONTINUOUS_PURGE,
+  #endif
   ADVANCED_PAUSE_MESSAGE_OPTION,
   ADVANCED_PAUSE_MESSAGE_RESUME,
   ADVANCED_PAUSE_MESSAGE_STATUS,
@@ -51,7 +54,7 @@ enum AdvancedPauseMessage {
   ADVANCED_PAUSE_MESSAGE_WAIT_FOR_NOZZLES_TO_HEAT
 };
 
-enum AdvancedPauseMenuResponse {
+enum AdvancedPauseMenuResponse : char {
   ADVANCED_PAUSE_RESPONSE_WAIT_FOR,
   ADVANCED_PAUSE_RESPONSE_EXTRUDE_MORE,
   ADVANCED_PAUSE_RESPONSE_RESUME_PRINT
@@ -68,9 +71,9 @@ bool pause_print(const float &retract, const point_t &park_point, const float &u
 
 void wait_for_filament_reload(const int8_t max_beep_count=0);
 
-void resume_print(const float &load_length=0, const float &extrude_length=ADVANCED_PAUSE_EXTRUDE_LENGTH, const int8_t max_beep_count=0);
+void resume_print(const float &slow_load_length=0, const float &fast_load_length=0, const float &extrude_length=ADVANCED_PAUSE_PURGE_LENGTH, const int8_t max_beep_count=0);
 
-bool load_filament(const float &load_length=0, const float &extrude_length=0, const int8_t max_beep_count=0, const bool show_lcd=false,
+bool load_filament(const float &slow_load_length=0, const float &fast_load_length=0, const float &extrude_length=0, const int8_t max_beep_count=0, const bool show_lcd=false,
                           const bool pause_for_user=false, const AdvancedPauseMode mode=ADVANCED_PAUSE_MODE_PAUSE_PRINT);
 
 bool unload_filament(const float &unload_length, const bool show_lcd=false, const AdvancedPauseMode mode=ADVANCED_PAUSE_MODE_PAUSE_PRINT);

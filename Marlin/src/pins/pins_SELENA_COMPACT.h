@@ -26,7 +26,7 @@
  */
 
 #ifndef TARGET_LPC1768
-  #error "Oops!  Make sure you have LPC1768 selected."
+  #error "Oops!  Make sure you have the LPC1768 environment selected in your IDE."
 #endif
 
 #ifndef BOARD_NAME
@@ -73,9 +73,9 @@
 // Temperature Sensors
 // 3.3V max when defined as an analog input
 //
-#define TEMP_BED_PIN        0  // A0 (TH1)
-#define TEMP_0_PIN          1  // A1 (TH2)
-#define TEMP_1_PIN          2  // A2 (TH3)
+#define TEMP_BED_PIN        0   // A0 (TH1)
+#define TEMP_0_PIN          1   // A1 (TH2)
+#define TEMP_1_PIN          2   // A2 (TH3)
 
 
 //

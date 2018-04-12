@@ -70,7 +70,7 @@ extern "C" void delay(const int msec) {
 }
 
 // IO functions
-// As defined by Arduino INPUT(0x0), OUPUT(0x1), INPUT_PULLUP(0x2)
+// As defined by Arduino INPUT(0x0), OUTPUT(0x1), INPUT_PULLUP(0x2)
 void pinMode(const pin_t pin, const uint8_t mode) {
   if (!VALID_PIN(pin)) return;
 
@@ -165,9 +165,9 @@ void eeprom_write_byte(unsigned char *pos, unsigned char value) {
 
 unsigned char eeprom_read_byte(uint8_t * pos) { return '\0'; }
 
-void eeprom_read_block (void *__dst, const void *__src, size_t __n) { }
+void eeprom_read_block(void *__dst, const void *__src, size_t __n) { }
 
-void eeprom_update_block (const void *__src, void *__dst, size_t __n) { }
+void eeprom_update_block(const void *__src, void *__dst, size_t __n) { }
 
 char *dtostrf (double __val, signed char __width, unsigned char __prec, char *__s) {
   char format_string[20];
