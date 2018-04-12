@@ -905,9 +905,12 @@
 
 #define SDPOWER            -1
 #define HEATER_1_PIN       -1
-#undef SD_DETECT_PIN
+#undef  SD_DETECT_PIN
 #define SD_DETECT_PIN      49 // Pin 49 if using display sd interface
-#undef KILL_PIN
+#undef  KILL_PIN
 #define KILL_PIN           -1
+#define SERVO0_PIN         44
+#undef  Z_MIN_PROBE_PIN
+#define Z_MIN_PROBE_PIN    43
 
 #endif // __PINS_H__

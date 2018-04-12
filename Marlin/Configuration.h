@@ -650,7 +650,7 @@
  *
  * Enable this option for a probe connected to the Z Min endstop pin.
  */
-#define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
+///#define Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN
 
 /**
  * Z_MIN_PROBE_ENDSTOP
@@ -671,7 +671,7 @@
  * disastrous consequences. Use with caution and do your homework.
  *
  */
-//#define Z_MIN_PROBE_ENDSTOP
+#define Z_MIN_PROBE_ENDSTOP
 
 /**
  * Probe Type
@@ -702,7 +702,7 @@
 /**
  * The BLTouch probe uses a Hall effect sensor and emulates a servo.
  */
-//#define BLTOUCH
+#define BLTOUCH
 #if ENABLED(BLTOUCH)
   //#define BLTOUCH_DELAY 375   // (ms) Enable and increase if needed
 #endif
@@ -748,9 +748,9 @@
  *      O-- FRONT --+
  *    (0,0)
  */
-#define X_PROBE_OFFSET_FROM_EXTRUDER 10  // X offset: -left  +right  [of the nozzle]
-#define Y_PROBE_OFFSET_FROM_EXTRUDER 10  // Y offset: -front +behind [the nozzle]
-#define Z_PROBE_OFFSET_FROM_EXTRUDER 0   // Z offset: -below +above  [the nozzle]
+#define X_PROBE_OFFSET_FROM_EXTRUDER 0  // X offset: -left  +right  [of the nozzle]
+#define Y_PROBE_OFFSET_FROM_EXTRUDER 29  // Y offset: -front +behind [the nozzle]
+#define Z_PROBE_OFFSET_FROM_EXTRUDER -2.0   // Z offset: -below +above  [the nozzle]
 
 // Certain types of probes need to stay away from edges
 #define MIN_PROBE_EDGE 10
@@ -762,12 +762,12 @@
 #define Z_PROBE_SPEED_FAST HOMING_FEEDRATE_Z
 
 // Speed for the "accurate" probe of each point
-#define Z_PROBE_SPEED_SLOW (Z_PROBE_SPEED_FAST / 2)
+#define Z_PROBE_SPEED_SLOW (Z_PROBE_SPEED_FAST / 3)
 
 // The number of probes to perform at each point.
 //   Set to 2 for a fast/slow probe, using the second probe result.
 //   Set to 3 or more for slow probes, averaging the results.
-//#define MULTIPLE_PROBING 2
+#define MULTIPLE_PROBING 2
 
 /**
  * Z probes require clearance when deploying, stowing, and moving between
@@ -794,7 +794,7 @@
 #define Z_PROBE_OFFSET_RANGE_MAX 20
 
 // Enable the M48 repeatability test to test probe accuracy
-//#define Z_MIN_PROBE_REPEATABILITY_TEST
+#define Z_MIN_PROBE_REPEATABILITY_TEST
 
 // For Inverting Stepper Enable Pins (Active Low) use 0, Non Inverting (Active High) use 1
 // :{ 0:'Low', 1:'High' }
@@ -854,7 +854,7 @@
 
 // The size of the print bed
 #define X_BED_SIZE 230
-#define Y_BED_SIZE 290
+#define Y_BED_SIZE 281
 
 // Travel limits (mm) after homing, corresponding to endstop positions.
 #define X_MIN_POS 0
@@ -947,14 +947,14 @@
 //#define AUTO_BED_LEVELING_3POINT
 //#define AUTO_BED_LEVELING_LINEAR
 //#define AUTO_BED_LEVELING_BILINEAR
-//#define AUTO_BED_LEVELING_UBL
+#define AUTO_BED_LEVELING_UBL
 //#define MESH_BED_LEVELING
 
 /**
  * Normally G28 leaves leveling disabled on completion. Enable
  * this option to have G28 restore the prior leveling state.
  */
-//#define RESTORE_LEVELING_AFTER_G28
+#define RESTORE_LEVELING_AFTER_G28
 
 /**
  * Enable detailed logging of G28, G29, M48, etc.
@@ -978,12 +978,12 @@
   /**
    * Enable the G26 Mesh Validation Pattern tool.
    */
-  //#define G26_MESH_VALIDATION
+  #define G26_MESH_VALIDATION
   #if ENABLED(G26_MESH_VALIDATION)
-    #define MESH_TEST_NOZZLE_SIZE    0.4  // (mm) Diameter of primary nozzle.
+    #define MESH_TEST_NOZZLE_SIZE    0.8  // (mm) Diameter of primary nozzle.
     #define MESH_TEST_LAYER_HEIGHT   0.2  // (mm) Default layer height for the G26 Mesh Validation Tool.
-    #define MESH_TEST_HOTEND_TEMP  205.0  // (°C) Default nozzle temperature for the G26 Mesh Validation Tool.
-    #define MESH_TEST_BED_TEMP      60.0  // (°C) Default bed temperature for the G26 Mesh Validation Tool.
+    #define MESH_TEST_HOTEND_TEMP  235.0  // (°C) Default nozzle temperature for the G26 Mesh Validation Tool.
+    #define MESH_TEST_BED_TEMP     100.0  // (°C) Default bed temperature for the G26 Mesh Validation Tool.
   #endif
 
 #endif

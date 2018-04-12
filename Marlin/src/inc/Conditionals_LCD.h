@@ -82,7 +82,7 @@
   #elif ENABLED(VIKI2)
     #define LCD_CONTRAST_MIN       0
     #define LCD_CONTRAST_MAX     255
-    #define DEFAULT_LCD_CONTRAST 140
+    #define DEFAULT_LCD_CONTRAST  60
     #define U8GLIB_ST7565_64128N
   #elif ENABLED(ELB_FULL_GRAPHIC_CONTROLLER)
     #define LCD_CONTRAST_MIN      90

@@ -700,7 +700,7 @@
  *
  * Warning: Does not respect endstops!
  */
-//#define BABYSTEPPING
+#define BABYSTEPPING
 #if ENABLED(BABYSTEPPING)
   //#define BABYSTEP_XY              // Also enable X/Y Babystepping. Not supported on DELTA!
   #define BABYSTEP_INVERT_Z false    // Change if Z babysteps should go the other way
@@ -1407,7 +1407,7 @@
 /**
  * M43 - display pin status, watch pins for changes, watch endstops & toggle LED, Z servo probe test, toggle pins
  */
-//#define PINS_DEBUGGING
+#define PINS_DEBUGGING
 
 /**
  * Auto-report temperatures with M155 S<seconds>
