@@ -886,7 +886,7 @@
 
 // Note: default SPI pins are defined in the HAL
 
-#include "../HAL/HAL_spi_pins.h"
+#include HAL_PATH(../HAL, spi_pins.h)
 
 #if !defined(__AVR_ATmega1280__) && !defined(__AVR_ATmega2560__)
   #error Oops!  Make sure you have 'Arduino Mega' selected from the 'Tools -> Boards' menu.
