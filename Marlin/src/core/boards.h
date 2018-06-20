@@ -58,9 +58,10 @@
 #define BOARD_K8400             79    // Velleman K8400 Controller (derived from 3Drag Controller)
 #define BOARD_BAM_DICE          401   // 2PrintBeta BAM&DICE with STK drivers
 #define BOARD_BAM_DICE_DUE      402   // 2PrintBeta BAM&DICE Due with STK drivers
-#define BOARD_MKS_BASE          40    // MKS BASE 1.0
+#define BOARD_MKS_BASE          40    // MKS BASE v1.0
+#define BOARD_MKS_BASE_15       405   // MKS v1.5 with Allegro A4982 stepper drivers
 #define BOARD_MKS_BASE_HEROIC   41    // MKS BASE 1.0 with Heroic HR4982 stepper drivers
-#define BOARD_MKS_13            47    // MKS v1.3 or 1.4 (maybe higher)
+#define BOARD_MKS_GEN_13        47    // MKS GEN v1.3 or 1.4
 #define BOARD_MKS_GEN_L         53    // MKS GEN L
 #define BOARD_ZRIB_V20          504   // zrib V2.0 control board (Chinese knock off RAMPS replica)
 #define BOARD_FELIX2            37    // Felix 2.0+ Electronics Board (RAMPS like)
@@ -75,7 +76,8 @@
 #define BOARD_RUMBA             80    // Rumba
 #define BOARD_BQ_ZUM_MEGA_3D    503   // bq ZUM Mega 3D
 #define BOARD_MAKEBOARD_MINI    431   // MakeBoard Mini v2.1.2 is a control board sold by MicroMake
-#define BOARD_TRIGORILLA        343   // TriGorilla Anycubic version 1.3 based on RAMPS EFB
+#define BOARD_TRIGORILLA_13     343   // TriGorilla Anycubic version 1.3 based on RAMPS EFB
+#define BOARD_TRIGORILLA_14     443   // TriGorilla Anycubic version 1.4 based on RAMPS EFB
 #define BOARD_RAMPS_ENDER_4     243   // Creality: Ender-4, CR-8
 
 //
@@ -123,6 +125,7 @@
 #define BOARD_MELZI_TRONXY      505   // Tronxy X5S
 #define BOARD_STB_11            64    // STB V1.1
 #define BOARD_AZTEEG_X1         65    // Azteeg X1
+#define BOARD_ANET_10           69    // Anet 1.0 (Melzi clone)
 
 //
 // Other ATmega644P, ATmega644, ATmega1284P
@@ -139,7 +142,6 @@
 #define BOARD_OMCA_A            90    // Alpha OMCA board
 #define BOARD_OMCA              91    // Final OMCA board
 #define BOARD_SETHI             20    // Sethi 3D_1
-#define BOARD_ANET_10           69    // Anet 1.0 (Melzi clone)
 
 //
 // Teensyduino - AT90USB1286, AT90USB1286P
@@ -151,7 +153,7 @@
 #define BOARD_BRAINWAVE         82    // Brainwave (AT90USB646)
 #define BOARD_BRAINWAVE_PRO     85    // Brainwave Pro (AT90USB1286)
 #define BOARD_SAV_MKI           83    // SAV Mk-I (AT90USB1286)
-#define BOARD_TEENSY2           84    // Teensy++2.0 (AT90USB1286) - CLI compile: HARDWARE_MOTHERBOARD=84  make
+#define BOARD_TEENSY2           84    // Teensy++2.0 (AT90USB1286)
 #define BOARD_5DPRINT           88    // 5DPrint D8 Driver Board
 
 //
@@ -174,6 +176,7 @@
 //
 // SAM3X8E ARM Cortex M3
 //
+
 #define BOARD_DUE3DOM          1411   // DUE3DOM for Arduino DUE
 #define BOARD_DUE3DOM_MINI     1412   // DUE3DOM MINI for Arduino DUE
 #define BOARD_RADDS            1502   // RADDS
@@ -200,20 +203,33 @@
 #define BOARD_ALLIGATOR        1602   // Alligator Board R2
 
 //
-// ARM Cortex M4
+// STM32 ARM Cortex-M3
 //
-#define BOARD_TEENSY35_36       841   // Teensy3.5 and Teensy3.6
-#define BOARD_STM32F1R         1800   // STM3R Libmaple based STM32F1 controller
+
+#define BOARD_STM32F1R         1800   // STM32R Libmaple based STM32F1 controller
 #define BOARD_MALYAN_M200      1801   // STM32C8T6 Libmaple based stm32f1 controller
-#define BOARD_BEAST            1802   // STM32FxxxVxT6 Libmaple based stm32f4 controller
 #define BOARD_STM3R_MINI       1803   // STM32 Libmaple based stm32f1 controller
+#define BOARD_GTM32_PRO_VB     1805   // STM32f103VET6 controller
+
+//
+// STM32 ARM Cortex-M4F
+//
+
+#define BOARD_TEENSY35_36       841   // Teensy3.5 and Teensy3.6
+#define BOARD_BEAST            1802   // STM32FxxxVxT6 Libmaple based stm32f4 controller
+#define BOARD_STM32F4          1804   // STM32 STM32GENERIC based STM32F4 controller
 
 //
 // ARM Cortex M7
 //
+
 #define BOARD_THE_BORG         1860   // THE-BORG (Power outputs: Hotend0, Hotend1, Bed, Fan)
 
+//
+// Espressif ESP32 WiFi
+//
+#define BOARD_ESP32            1900
 
-#define MB(board) (MOTHERBOARD==BOARD_##board)
+#define MB(board) (defined(BOARD_##board) && MOTHERBOARD==BOARD_##board)
 
 #endif // __BOARDS_H

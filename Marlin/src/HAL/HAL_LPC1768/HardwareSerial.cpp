@@ -22,7 +22,6 @@
 
 #ifdef TARGET_LPC1768
 
-#include "../../inc/MarlinConfig.h"
 #include "HardwareSerial.h"
 
 #if SERIAL_PORT == 0 || SERIAL_PORT_2 == 0
@@ -124,8 +123,8 @@ void HardwareSerial::begin(uint32_t baudrate) {
   Baudrate = baudrate;
 }
 
-int HardwareSerial::peek() {
-  int byte = -1;
+int16_t HardwareSerial::peek() {
+  int16_t byte = -1;
 
   // Temporarily lock out UART receive interrupts during this read so the UART receive
   // interrupt won't cause problems with the index values
@@ -140,8 +139,8 @@ int HardwareSerial::peek() {
   return byte;
 }
 
-int HardwareSerial::read() {
-  int byte = -1;
+int16_t HardwareSerial::read() {
+  int16_t byte = -1;
 
   // Temporarily lock out UART receive interrupts during this read so the UART receive
   // interrupt won't cause problems with the index values
@@ -202,7 +201,7 @@ size_t HardwareSerial::write(uint8_t send) {
   }
 #endif
 
-int HardwareSerial::available() {
+size_t HardwareSerial::available() {
   return (RxQueueWritePos + RX_BUFFER_SIZE - RxQueueReadPos) % RX_BUFFER_SIZE;
 }
 
@@ -211,16 +210,17 @@ void HardwareSerial::flush() {
   RxQueueReadPos = 0;
 }
 
-void HardwareSerial::printf(const char *format, ...) {
+size_t HardwareSerial::printf(const char *format, ...) {
   char RxBuffer[256];
   va_list vArgs;
   va_start(vArgs, format);
   int length = vsnprintf(RxBuffer, 256, format, vArgs);
   va_end(vArgs);
   if (length > 0 && length < 256) {
-    for (int i = 0; i < length; ++i)
+    for (size_t i = 0; i < (size_t)length; ++i)
       write(RxBuffer[i]);
   }
+  return length;
 }
 
 void HardwareSerial::IRQHandler() {
@@ -248,6 +248,9 @@ void HardwareSerial::IRQHandler() {
   if (IIRValue == UART_IIR_INTID_RDA) {
     // Clear the FIFO
     while (UART_Receive(UARTx, &byte, 1, NONE_BLOCKING)) {
+      #if ENABLED(EMERGENCY_PARSER)
+        emergency_parser.update(emergency_state, byte);
+      #endif
       if ((RxQueueWritePos + 1) % RX_BUFFER_SIZE != RxQueueReadPos) {
         RxBuffer[RxQueueWritePos] = byte;
         RxQueueWritePos = (RxQueueWritePos + 1) % RX_BUFFER_SIZE;

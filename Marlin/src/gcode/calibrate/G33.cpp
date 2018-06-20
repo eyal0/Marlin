@@ -85,7 +85,7 @@ void ac_setup(const bool reset_bed) {
     tool_change(0, 0, true);
   #endif
 
-  stepper.synchronize();
+  planner.synchronize();
   setup_for_endstop_or_probe_move();
 
   #if HAS_LEVELING
@@ -483,7 +483,7 @@ void GcodeSuite::G33() {
              _opposite_results    = (_4p_calibration && !towers_set) || probe_points >= 3,
              _endstop_results     = probe_points != 1 && probe_points != -1 && probe_points != 0,
              _angle_results       = probe_points >= 3  && towers_set;
-  const static char save_message[] PROGMEM = "Save with M500 and/or copy to Configuration.h";
+  static const char save_message[] PROGMEM = "Save with M500 and/or copy to Configuration.h";
   int8_t iterations = 0;
   float test_precision,
         zero_std_dev = (verbose_level ? 999.0 : 0.0), // 0.0 in dry-run mode : forced end
@@ -519,15 +519,12 @@ void GcodeSuite::G33() {
   }
 
   // Report settings
-
-  const char *checkingac = PSTR("Checking... AC");
+  const char* checkingac = PSTR("Checking... AC");
   serialprintPGM(checkingac);
   if (verbose_level == 0) SERIAL_PROTOCOLPGM(" (DRY-RUN)");
   if (set_up) SERIAL_PROTOCOLPGM("  (SET-UP)");
   SERIAL_EOL();
-  char mess[11];
-  strcpy_P(mess, checkingac);
-  lcd_setstatus(mess);
+  lcd_setstatusPGM(checkingac);
 
   print_calibration_settings(_endstop_results, _angle_results);
 

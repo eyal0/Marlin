@@ -44,6 +44,10 @@
   #include "../../../libs/least_squares_fit.h"
 #endif
 
+#if ABL_PLANAR
+  #include "../../../libs/vector_3.h"
+#endif
+
 #if ABL_GRID
   #if ENABLED(PROBE_Y_FIRST)
     #define PR_OUTER_VAR xCount
@@ -63,6 +67,8 @@
  *      Will fail if the printer has not been homed with G28.
  *
  * Enhanced G29 Auto Bed Leveling Probe Routine
+ *
+ *  O  Auto-level only if needed
  *
  *  D  Dry-Run mode. Just evaluate the bed Topology - Don't apply
  *     or alter the bed level data. Useful to check the topology
@@ -170,6 +176,16 @@ void GcodeSuite::G29() {
   // Don't allow auto-leveling without homing first
   if (axis_unhomed_error()) return;
 
+  if (!no_action && planner.leveling_active && parser.boolval('O')) { // Auto-level only if needed
+    #if ENABLED(DEBUG_LEVELING_FEATURE)
+      if (DEBUGGING(LEVELING)) {
+        SERIAL_ECHOLNPGM("> Auto-level not needed, skip");
+        SERIAL_ECHOLNPGM("<<< G29");
+      }
+    #endif
+    return;
+  }
+
   // Define local vars 'static' for manual probing, 'auto' otherwise
   #if ENABLED(PROBE_MANUALLY)
     #define ABL_VAR static
@@ -251,6 +267,10 @@ void GcodeSuite::G29() {
    * On the initial G29 fetch command parameters.
    */
   if (!g29_in_progress) {
+
+    #if ENABLED(DUAL_X_CARRIAGE)
+      if (active_extruder != 0) tool_change(0);
+    #endif
 
     #if ENABLED(PROBE_MANUALLY) || ENABLED(AUTO_BED_LEVELING_LINEAR)
       abl_probe_index = -1;
@@ -360,8 +380,17 @@ void GcodeSuite::G29() {
       front_probe_bed_position = parser.seenval('F') ? (int)RAW_Y_POSITION(parser.value_linear_units()) : FRONT_PROBE_BED_POSITION;
       back_probe_bed_position  = parser.seenval('B') ? (int)RAW_Y_POSITION(parser.value_linear_units()) : BACK_PROBE_BED_POSITION;
 
-      if ( !position_is_reachable_by_probe(left_probe_bed_position, front_probe_bed_position)
-        || !position_is_reachable_by_probe(right_probe_bed_position, back_probe_bed_position)) {
+      if (
+        #if IS_SCARA || ENABLED(DELTA)
+             !position_is_reachable_by_probe(left_probe_bed_position, 0)
+          || !position_is_reachable_by_probe(right_probe_bed_position, 0)
+          || !position_is_reachable_by_probe(0, front_probe_bed_position)
+          || !position_is_reachable_by_probe(0, back_probe_bed_position)
+        #else
+             !position_is_reachable_by_probe(left_probe_bed_position, front_probe_bed_position)
+          || !position_is_reachable_by_probe(right_probe_bed_position, back_probe_bed_position)
+        #endif
+      ) {
         SERIAL_PROTOCOLLNPGM("? (L,R,F,B) out of bounds.");
         return;
       }
@@ -378,7 +407,7 @@ void GcodeSuite::G29() {
       SERIAL_EOL();
     }
 
-    stepper.synchronize();
+    planner.synchronize();
 
     // Disable auto bed leveling during G29.
     // Be formal so G29 can be done successively without G28.
@@ -458,7 +487,7 @@ void GcodeSuite::G29() {
     if (verbose_level || seenQ) {
       SERIAL_PROTOCOLPGM("Manual G29 ");
       if (g29_in_progress) {
-        SERIAL_PROTOCOLPAIR("point ", min(abl_probe_index + 1, abl_points));
+        SERIAL_PROTOCOLPAIR("point ", MIN(abl_probe_index + 1, abl_points));
         SERIAL_PROTOCOLLNPAIR(" of ", abl_points);
       }
       else
@@ -473,7 +502,7 @@ void GcodeSuite::G29() {
         enable_soft_endstops = soft_endstops_enabled;
       #endif
       // Move close to the bed before the first point
-      do_blocking_move_to_z(Z_MIN_POS);
+      do_blocking_move_to_z(0);
     }
     else {
 
@@ -936,8 +965,8 @@ void GcodeSuite::G29() {
       #if ENABLED(DEBUG_LEVELING_FEATURE)
         if (DEBUGGING(LEVELING)) SERIAL_ECHOLNPAIR("Z Probe End Script: ", Z_PROBE_END_SCRIPT);
       #endif
+      planner.synchronize();
       enqueue_and_echo_commands_P(PSTR(Z_PROBE_END_SCRIPT));
-      stepper.synchronize();
     #endif
 
     // Auto Bed Leveling is complete! Enable if possible.
@@ -956,7 +985,7 @@ void GcodeSuite::G29() {
   if (planner.leveling_active)
     SYNC_PLAN_POSITION_KINEMATIC();
 
-  #if HAS_BED_PROBE && Z_AFTER_PROBING
+  #if HAS_BED_PROBE && defined(Z_AFTER_PROBING)
     move_z_after_probing();
   #endif
 

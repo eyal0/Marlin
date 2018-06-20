@@ -36,10 +36,11 @@
 
 // unused
 /*
-#define PIN_P0_27         P0_27
-#define PIN_P0_28         P0_28
+#define PIN_P0_27          P0_27
+#define PIN_P0_28          P0_28
 */
 
+#define LED_PIN           P1_18 // LED2 P1_19, LED3 P1_20, LED4 P1_21
 
 //
 // Servo pin
@@ -86,25 +87,20 @@
 // Temperature Sensors
 // 3.3V max when defined as an analog input
 //
-
 #define TEMP_BED_PIN        0   // A0 (TH1)
 #define TEMP_0_PIN          1   // A1 (TH2)
 #define TEMP_1_PIN          2   // A2 (TH3)
 #define TEMP_2_PIN          3   // A3 (TH4)
 
-
 //
 // Heaters / Fans
 //
-
 #define HEATER_BED_PIN     P2_05
 #define HEATER_0_PIN       P2_07
 #define HEATER_1_PIN       P2_06
-#define FAN_PIN            P2_04
-
-
-#define PS_ON_PIN          P0_25
-
+#ifndef FAN_PIN
+  #define FAN_PIN          P2_04
+#endif
 
 //
 // Connector J7
@@ -132,13 +128,18 @@
 //
 // Prusa i3 MK2 Multi Material Multiplexer Support
 //
-
 #if ENABLED(MK2_MULTIPLEXER)
   #define E_MUX0_PIN         P1_23   // J8-3
   #define E_MUX1_PIN         P2_12   // J8-4
   #define E_MUX2_PIN         P2_11   // J8-5
 #endif
 
+//
+// Misc. Functions
+//
+#define PS_ON_PIN          P0_25
+#define LPC_SOFTWARE_SPI  // MKS_SBASE needs a software SPI because the
+                          // selected pins are not on a hardware SPI controller
 
 /**
  * Smart LCD adapter
@@ -158,7 +159,6 @@
   #define BTN_ENC          P1_30   // EXP1.2
   #define BTN_EN1          P3_26   // EXP2.5
   #define BTN_EN2          P3_25   // EXP2.3
-  #define SD_DETECT_PIN    P0_27   // EXP2.7
   #define LCD_PINS_RS      P0_16   // EXP1.4
   #define LCD_SDSS         P0_28   // EXP2.4
   #define LCD_PINS_ENABLE  P0_18   // EXP1.3
@@ -181,12 +181,6 @@
 #define ENET_TXD0          P1_00   // J12-11
 #define ENET_TXD1          P1_01   // J12-12
 
-//
-// Misc. Functions
-//
-#define LPC_SOFTWARE_SPI  // MKS_SBASE needs a software SPI because the
-                          // selected pins are not on a hardware SPI controller
-
 // A custom cable is needed. See the README file in the
 // Marlin\src\config\examples\Mks\Sbase directory
 
@@ -194,8 +188,20 @@
 #define MISO_PIN           P1_23   // J8-3 (moved from EXP2 P0.8)
 #define MOSI_PIN           P2_12   // J8-4 (moved from EXP2 P0.5)
 #define SS_PIN             P0_28
-#define SD_DETECT_PIN      P0_27
 #define SDSS               P0_06
+
+/**
+ * P0.27 is on EXP2 and the on-board SD card's socket. That means it can't be
+ * used as the SD_DETECT for the LCD's SD card.
+ *
+ * The best solution is to use the custom cable to connect the LCD's SD_DETECT
+ * to a pin NOT on EXP2.
+ *
+ * If you can't find a pin to use for the LCD's SD_DETECT then comment out
+ * SD_DETECT_PIN entirely and remove that wire from the the custom cable.
+ */
+#define SD_DETECT_PIN      P2_11   // J8-5 (moved from EXP2 P0.27)
+
 
 /**
  *  PWMs

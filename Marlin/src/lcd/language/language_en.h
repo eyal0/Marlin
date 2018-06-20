@@ -371,11 +371,8 @@
 #ifndef MSG_LED_CONTROL
   #define MSG_LED_CONTROL                     _UxGT("LED Control")
 #endif
-#ifndef MSG_LEDS_ON
-  #define MSG_LEDS_ON                         _UxGT("Lights On")
-#endif
-#ifndef MSG_LEDS_OFF
-  #define MSG_LEDS_OFF                        _UxGT("Lights Off")
+#ifndef MSG_LEDS
+  #define MSG_LEDS                            _UxGT("Lights")
 #endif
 #ifndef MSG_LED_PRESETS
   #define MSG_LED_PRESETS                     _UxGT("Light Presets")
@@ -540,6 +537,9 @@
 #ifndef MSG_VE_JERK
   #define MSG_VE_JERK                         _UxGT("Ve-jerk")
 #endif
+#ifndef MSG_JUNCTION_DEVIATION
+  #define MSG_JUNCTION_DEVIATION              _UxGT("Junction Dev")
+#endif
 #ifndef MSG_VELOCITY
   #define MSG_VELOCITY                        _UxGT("Velocity")
 #endif
@@ -681,8 +681,8 @@
 #ifndef MSG_PRINT_PAUSED
   #define MSG_PRINT_PAUSED                    _UxGT("Print paused")
 #endif
-#ifndef MSG_RESUMING
-  #define MSG_RESUMING                        _UxGT("Resuming print")
+#ifndef MSG_PRINTING
+  #define MSG_PRINTING                        _UxGT("Printing...")
 #endif
 #ifndef MSG_PRINT_ABORTED
   #define MSG_PRINT_ABORTED                   _UxGT("Print aborted")
@@ -742,7 +742,7 @@
   #define MSG_CNG_SDCARD                      _UxGT("Change SD card")
 #endif
 #ifndef MSG_ZPROBE_OUT
-  #define MSG_ZPROBE_OUT                      _UxGT("Z probe out. bed")
+  #define MSG_ZPROBE_OUT                      _UxGT("Z Probe past bed")
 #endif
 #ifndef MSG_SKEW_FACTOR
   #define MSG_SKEW_FACTOR                     _UxGT("Skew Factor")
@@ -769,7 +769,7 @@
   #define MSG_FIRST                           _UxGT("first")
 #endif
 #ifndef MSG_ZPROBE_ZOFFSET
-  #define MSG_ZPROBE_ZOFFSET                  _UxGT("Z Offset")
+  #define MSG_ZPROBE_ZOFFSET                  _UxGT("Probe Z Offset")
 #endif
 #ifndef MSG_BABYSTEP_X
   #define MSG_BABYSTEP_X                      _UxGT("Babystep X")
@@ -831,23 +831,14 @@
 #ifndef MSG_HEATING
   #define MSG_HEATING                         _UxGT("Heating...")
 #endif
-#ifndef MSG_HEATING_COMPLETE
-  #define MSG_HEATING_COMPLETE                _UxGT("Heating done.")
-#endif
 #ifndef MSG_COOLING
   #define MSG_COOLING                         _UxGT("Cooling...")
 #endif
-#ifndef MSG_COOLING_COMPLETE
-  #define MSG_COOLING_COMPLETE                _UxGT("Cooling done.")
-#endif
 #ifndef MSG_BED_HEATING
-  #define MSG_BED_HEATING                     _UxGT("Bed heating.")
+  #define MSG_BED_HEATING                     _UxGT("Bed heating...")
 #endif
 #ifndef MSG_BED_COOLING
-  #define MSG_BED_COOLING                     _UxGT("Bed cooling.")
-#endif
-#ifndef MSG_BED_DONE
-  #define MSG_BED_DONE                        _UxGT("Bed done.")
+  #define MSG_BED_COOLING                     _UxGT("Bed cooling...")
 #endif
 #ifndef MSG_DELTA_CALIBRATE
   #define MSG_DELTA_CALIBRATE                 _UxGT("Delta Calibration")
