@@ -912,6 +912,5 @@
 #define SERVO0_PIN         44
 #undef  Z_MIN_PROBE_PIN
 #define Z_MIN_PROBE_PIN    43
-#undef  LCD_SCREEN_ROT_180
 
 #endif // __PINS_H__
