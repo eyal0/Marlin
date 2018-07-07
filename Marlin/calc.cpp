@@ -380,23 +380,18 @@ int main(int argc, char *argv[]) {
 	plan_buffer_line(x,y,z,e,feed_rate,extruder);
 	fp = fopen(argv[1], "r");
 	while(!feof(fp)) {
-		get_command();
-		while(buflen) { 
-			process_commands();
-		    buflen = (buflen-1);
-			bufindr = (bufindr + 1)%BUFSIZE;
-		}
-
+          get_command();
+          while(buflen) {
+            process_commands();
+            buflen = (buflen-1);
+            bufindr = (bufindr + 1)%BUFSIZE;
+          }
 	}
 	fclose(fp);
 	for(int i=0; i<100; i++) {
 		manage_inactivity2();
 	}
 	printf("Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
-	int min = total_time / 60;
-	int sec = total_time - min*60;
-	int hr = min / 60;
-	min -= hr*60;
-	printf("Total time: %02d:%02d:%02d s\n", hr,min,sec);
+	printf("Total time: %f s\n", total_time);
 	return 0;
 }
