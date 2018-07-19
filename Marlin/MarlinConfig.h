@@ -35,13 +35,13 @@
 #endif
 
 #include "types.h"
-#include "HAL.h"
-#include "pins.h"
+//#include "HAL.h"
+//#include "pins.h"
 #include "Conditionals_post.h"
-#include "SanityCheck.h"
+//#include "SanityCheck.h"
 #include "enum.h"
 #include "language.h"
 #include "utility.h"
-#include "serial.h"
+//#include "serial.h"
 
 #endif // MARLIN_CONFIG_H
