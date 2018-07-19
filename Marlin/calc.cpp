@@ -8,8 +8,8 @@
 #include <sstream>
 #include <algorithm>
 #include <inttypes.h>
-#include "../core/macros.h"
-#include "../../Configuration.h"
+#include "macros.h"
+#include "Configuration.h"
 #include "planner.h"
 
 //===========================================================================
@@ -49,7 +49,7 @@ bool s_curve_acceleration = true; // This replaces the S_CURVE_ACCELERATION cons
 //===========================================================================
 //=============================private variables=============================
 //===========================================================================
-//const char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
+const char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
 static double calc_destination[NUM_AXIS] = {  0.0, 0.0, 0.0, 0.0};
 //static double offset[3] = {0.0, 0.0, 0.0};
 //static bool home_all_axis = true;

@@ -21,7 +21,7 @@ CXX_FLAGS = -Wall -static -std=gnu++11 $(OPT_FLAGS) $(M32_FLAGS)
 BIN = calc
 
 # define the C source files
-SRCS = src/module/planner.cpp src/module/calc.cpp
+SRCS = planner.cpp calc.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

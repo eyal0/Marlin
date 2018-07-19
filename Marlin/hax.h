@@ -10,7 +10,7 @@ void manage_inactivity2();
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include "../core/enum.h"
+#include "enum.h"
 
 //From "../HAL/HAL_LPC1768/include/Arduino.h"
 // Program Memory
