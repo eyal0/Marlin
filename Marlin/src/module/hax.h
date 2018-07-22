@@ -49,7 +49,7 @@ typedef int8_t pin_t;
 #define ENABLE_ISRS() do {} while(0)
 typedef uint16_t hal_timer_t;
 #define HAL_TIMER_TYPE_MAX 0xFFFF
-#define HAL_timer_set_compare(timer, compare)
+#define HAL_timer_set_compare(timer, compare) do {} while(0);
 #define STEPPER_TIMER_RATE      HAL_TIMER_RATE
 #define STEPPER_TIMER_TICKS_PER_US ((STEPPER_TIMER_RATE) / 1000000) // Cannot be of type double
 #define PULSE_TIMER_TICKS_PER_US STEPPER_TIMER_TICKS_PER_US
