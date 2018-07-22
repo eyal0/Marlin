@@ -64,7 +64,7 @@
 
 #include "planner.h"
 //#include "Configuration.h"
-//#include "stepper.h"
+#include "stepper.h"
 #include "motion.h"
 //#include "../module/temperature.h"
 //#include "../lcd/ultralcd.h"
@@ -99,7 +99,6 @@
 #define BLOCK_DELAY_FOR_1ST_MOVE 100
 
 Planner planner;
-Stepper stepper;
 
   // public:
 

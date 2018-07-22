@@ -11,6 +11,7 @@
 #include "../core/macros.h"
 #include "../../Configuration.h"
 #include "planner.h"
+#include "stepper.h"
 
 //===========================================================================
 //=============================public variables=============================
@@ -85,6 +86,17 @@ bool target_direction;
 
 
 int fanSpeed = 0;
+
+uint64_t timers[2];
+void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency) {
+  printf("timer reset\n");
+  UNUSED(frequency);
+  timers[timer_num] = 0;
+}
+
+uint64_t HAL_timer_get_count(const uint8_t timer_num) {
+  return timers[timer_num]++;
+}
 
 //void plan_buffer_line(const double &x, const float &y, const float &z, const float &e, float feed_rate, const uint8_t &extruder);
 
@@ -390,11 +402,13 @@ int blocks = 0;
 uint8_t last_direction_bits = 0;
 
 // Returns true if we found a block.
-bool idle2() {
+bool idle() {
+  Stepper::isr();
   block_t *block = Planner::get_current_block();
   if (block == NULL) {
     return false;
   }
+  /*
   blocks++;
   if(blocks % 100000 == 0) { fprintf(stderr, "."); }
 
@@ -423,7 +437,7 @@ bool idle2() {
            block->extra_data.extruder_position,
            total_time);
   }
-  Planner::discard_current_block();
+  Planner::discard_current_block();*/
   return true;
 }
 
@@ -433,6 +447,7 @@ int main(int argc, char *argv[]) {
   uint8_t extruder = 0;
   Config_ResetDefault();
   planner.init();
+  stepper.init();
   {
     // Add an initial line.
     ExtraData extra_data;
@@ -466,9 +481,11 @@ int main(int argc, char *argv[]) {
     process_commands(new_command, extra_data);
     new_command = get_command(in);
   }
-  while(idle2())
+  while(idle())
     ; // Keep going.
   in.close();
+  printf("timer0: %ld\n", HAL_timer_get_count(0));
+  printf("timer1: %ld\n", HAL_timer_get_count(1));
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
   fprintf(stderr, "Total time: %f\n", total_time);
   return 0;

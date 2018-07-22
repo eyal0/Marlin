@@ -135,8 +135,9 @@
 
 #else
 
-  #error "Unsupported MCU architecture"
-
+  FORCE_INLINE static void DELAY_CYCLES(uint32_t x) {
+    printf("delay cycles: %d", x);
+  }
 #endif
 
 // Delay in nanoseconds

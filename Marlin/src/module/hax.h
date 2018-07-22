@@ -11,6 +11,7 @@ void manage_inactivity2();
 #include <string.h>
 #include <inttypes.h>
 #include "../core/enum.h"
+#include "../HAL/math_32bit.h"
 
 //From "../HAL/HAL_LPC1768/include/Arduino.h"
 // Program Memory
@@ -30,10 +31,35 @@ void manage_inactivity2();
 #define HAL_TIMER_RATE         ((SystemCoreClock) / 4)  // frequency of timers peripherals
 #define SystemCoreClock 110000000
 
+//From src/HAL/HAL_LPC1768/include/Arduino.h
+#define PROGMEM
+
+//From need for the speed_lookuptable
+#define CPU_32_BIT
 
 //From "../Marlin.cpp"
-extern bool idle2();
-#define idle()
+extern bool idle();
+//#define idle()
+
+//From src/HAL/HAL_AVR/HAL.h
+typedef int8_t pin_t;
+#define HAL_timer_isr_prologue(TIMER_NUM)
+#define HAL_timer_isr_epilogue(TIMER_NUM)
+#define DISABLE_ISRS() do {} while(0)
+#define ENABLE_ISRS() do {} while(0)
+typedef uint16_t hal_timer_t;
+#define HAL_TIMER_TYPE_MAX 0xFFFF
+#define HAL_timer_set_compare(timer, compare)
+#define STEPPER_TIMER_RATE      HAL_TIMER_RATE
+#define STEPPER_TIMER_TICKS_PER_US ((STEPPER_TIMER_RATE) / 1000000) // Cannot be of type double
+#define PULSE_TIMER_TICKS_PER_US STEPPER_TIMER_TICKS_PER_US
+#define STEPPER_TIMER_PRESCALE  8
+#define PULSE_TIMER_PRESCALE   STEPPER_TIMER_PRESCALE
+void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency);
+uint64_t HAL_timer_get_count(const uint8_t timer_num);
+#define sei()
+#define STEP_TIMER_NUM 1
+#define PULSE_TIMER_NUM         STEP_TIMER_NUM
 
 //#define FORCE_INLINE inline __attribute__((always_inline)) 
 #define NUM_AXIS 4
@@ -59,22 +85,22 @@ extern bool idle2();
   NO_AXIS   = 0xFF
   };*/
 
-#define enable_X() while(0) {}
-#define enable_Y() while(0) {}
-#define enable_Z() while(0) {}
-#define enable_e()
-#define enable_E0() while(0) {}
-#define enable_e1()
-#define enable_e2()
+#define enable_X() do {} while(0)
+#define enable_Y() do {} while(0)
+#define enable_Z() do {} while(0)
+#define enable_E0() do {} while(0)
+#define enable_e() do {} while(0)
+#define enable_e1() do {} while(0)
+#define enable_e2() do {} while(0)
 
-#define disable_x()
-#define disable_y()
-#define disable_z()
-#define disable_e()
-#define disable_e0()
-#define disable_e1()
-#define disable_e2()
-#define disable_all_steppers()
+#define disable_x() do {} while(0)
+#define disable_y() do {} while(0)
+#define disable_z() do {} while(0)
+#define disable_e() do {} while(0)
+#define disable_e0() do {} while(0)
+#define disable_e1() do {} while(0)
+#define disable_e2() do {} while(0)
+#define disable_all_steppers() do {} while(0)
 
 #define MINIMUM_PLANNER_SPEED 0.05
 // (mm/sec)
@@ -84,16 +110,17 @@ extern int extrudemultiply;
 
 #define F_CPU 16000000
 
-#define manage_heater() 
-#define lcd_update() 
+#define manage_heater()  do {} while(0)
+#define lcd_update()  do {} while(0)
 
 #define byte uint8_t
 
 // Fixes for missing stepper.h and stepper.cpp
 
 #define STEPPER_ISR_ENABLED() false  // TODO: Check if this affects anything.
-#define DISABLE_STEPPER_DRIVER_INTERRUPT()
-#define ENABLE_STEPPER_DRIVER_INTERRUPT()
+#define DISABLE_STEPPER_DRIVER_INTERRUPT()  do {} while(0)
+#define ENABLE_STEPPER_DRIVER_INTERRUPT()  do {} while(0)
+/*
 struct Stepper {
   static bool is_block_busy(const void* const block) {
     return false;
@@ -111,7 +138,7 @@ struct Stepper {
   inline static void set_position(const int32_t &a, const int32_t &b, const int32_t &c, const int32_t &e) {
   }
 };
-
+*/
 typedef struct ExtraData {
   double filepos; // file position in percentage.
   double extruder_position; // Extruded so far.
@@ -120,3 +147,14 @@ typedef struct ExtraData {
 #define DRYRUN 1
 #define DEBUGGING(F) false
 #endif
+
+// pins don't matter
+#define E0_DIR_PIN 0
+#define WRITE(x,y)
+#define HAL_STEP_TIMER_ISR void hal_step_timer_isr(void)
+#define SET_OUTPUT(pin)
+
+//no output to serial anyway
+#define SERIAL_PROTOCOLPGM(x) do {} while(0)
+#define SERIAL_PROTOCOL(x) do {} while(0)
+#define SERIAL_EOL() do {} while(0)

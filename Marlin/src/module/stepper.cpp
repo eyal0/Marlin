@@ -84,15 +84,17 @@
 #endif
 
 #include "endstops.h"
+void Endstops::update() {}
+void Endstops::enable(bool x) {}
 #include "planner.h"
 #include "motion.h"
 
-#include "../module/temperature.h"
-#include "../lcd/ultralcd.h"
+//#include "../module/temperature.h"
+//#include "../lcd/ultralcd.h"
 #include "../core/language.h"
 #include "../gcode/queue.h"
 #include "../sd/cardreader.h"
-#include "../Marlin.h"
+//#include "../Marlin.h"
 #include "../HAL/Delay.h"
 
 #if MB(ALLIGATOR)
@@ -1300,7 +1302,6 @@ void Stepper::isr() {
  * is to keep pulse timing as regular as possible.
  */
 void Stepper::stepper_pulse_phase_isr() {
-
   // If we must abort the current block, do so!
   if (abort_current_block) {
     abort_current_block = false;
@@ -1308,6 +1309,7 @@ void Stepper::stepper_pulse_phase_isr() {
       axis_did_move = 0;
       current_block = NULL;
       planner.discard_current_block();
+      //printf("discard1\n");
     }
   }
 
@@ -1459,6 +1461,7 @@ uint32_t Stepper::stepper_block_phase_isr() {
       axis_did_move = 0;
       current_block = NULL;
       planner.discard_current_block();
+      //printf("discard2\n");
     }
     else {
       // Step events not completed yet...
@@ -1583,6 +1586,7 @@ uint32_t Stepper::stepper_block_phase_isr() {
           current_block->position[C_AXIS], current_block->position[E_AXIS]
         );
         planner.discard_current_block();
+        //printf("discard3\n");
 
         // Try to get a new block
         if (!(current_block = planner.get_current_block()))
