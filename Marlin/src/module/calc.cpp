@@ -413,7 +413,7 @@ uint8_t last_direction_bits = 0;
 
 // Returns true if we found a block.
 bool idle() {
-  total_timers[1] += compare[1] - timers[1];
+  total_timers[1] += compare[1] - timers[1] + 1;
   timers[1] = 0;
   Stepper::isr();
   block_t *block = Planner::get_current_block();
@@ -496,8 +496,8 @@ int main(int argc, char *argv[]) {
   while(idle())
     ; // Keep going.
   in.close();
-  printf("timer0: %lld\n", total_timers[0]);
-  printf("timer1: %lld\n", total_timers[1]);
+  printf("timer0: %f\n", double(total_timers[0])/27500000);
+  printf("timer1: %f\n", double(total_timers[1])/27500000);
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
   fprintf(stderr, "Total time: %f\n", total_time);
   return 0;
