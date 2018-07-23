@@ -87,7 +87,10 @@ bool target_direction;
 
 int fanSpeed = 0;
 
-uint64_t timers[2];
+long long total_timers[2] = {0,0};
+hal_timer_t timers[2] = {0,0};
+hal_timer_t compare[2] = {0,0};
+
 void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency) {
   printf("timer reset\n");
   UNUSED(frequency);
@@ -95,7 +98,14 @@ void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency) {
 }
 
 uint64_t HAL_timer_get_count(const uint8_t timer_num) {
-  return timers[timer_num]++;
+  timers[timer_num]++;
+  total_timers[timer_num]++;
+  return timers[timer_num];
+}
+
+void HAL_timer_set_compare(const int timer, const hal_timer_t compare_value) {
+  //printf("current %d, compare %d\n", timers[timer], compare_value);
+  compare[timer] = compare_value;
 }
 
 //void plan_buffer_line(const double &x, const float &y, const float &z, const float &e, float feed_rate, const uint8_t &extruder);
@@ -403,6 +413,8 @@ uint8_t last_direction_bits = 0;
 
 // Returns true if we found a block.
 bool idle() {
+  total_timers[1] += compare[1] - timers[1];
+  timers[1] = 0;
   Stepper::isr();
   block_t *block = Planner::get_current_block();
   if (block == NULL) {
@@ -484,8 +496,8 @@ int main(int argc, char *argv[]) {
   while(idle())
     ; // Keep going.
   in.close();
-  printf("timer0: %ld\n", HAL_timer_get_count(0));
-  printf("timer1: %ld\n", HAL_timer_get_count(1));
+  printf("timer0: %lld\n", total_timers[0]);
+  printf("timer1: %lld\n", total_timers[1]);
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
   fprintf(stderr, "Total time: %f\n", total_time);
   return 0;
