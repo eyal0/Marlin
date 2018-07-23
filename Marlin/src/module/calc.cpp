@@ -98,9 +98,14 @@ void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency) {
 }
 
 uint64_t HAL_timer_get_count(const uint8_t timer_num) {
-  timers[timer_num]++;
-  total_timers[timer_num]++;
   return timers[timer_num];
+}
+
+void HAL_timer_advance_until(const int timer_num, hal_timer_t timer_val) {
+  if (timer_val > timers[timer_num]) {
+    total_timers[timer_num] += timer_val - timers[timer_num];
+    timers[timer_num] = timer_val;
+  }
 }
 
 void HAL_timer_set_compare(const int timer, const hal_timer_t compare_value) {

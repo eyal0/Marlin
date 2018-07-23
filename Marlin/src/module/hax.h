@@ -50,6 +50,7 @@ typedef int8_t pin_t;
 typedef uint16_t hal_timer_t;
 #define HAL_TIMER_TYPE_MAX hal_timer_t(0xFFFF)
 void HAL_timer_set_compare(const int timer, const hal_timer_t compare);
+void HAL_timer_advance_until(const int timer, const hal_timer_t timer_val);
 #define STEPPER_TIMER_RATE      HAL_TIMER_RATE
 #define STEPPER_TIMER_TICKS_PER_US ((STEPPER_TIMER_RATE) / 1000000) // Cannot be of type double
 #define PULSE_TIMER_TICKS_PER_US STEPPER_TIMER_TICKS_PER_US
