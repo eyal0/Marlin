@@ -44,7 +44,7 @@
 #define STEPPER_H
 
 #include "../inc/MarlinConfig.h"
-
+#include "calc.h"
 // Disable multiple steps per ISR
 //#define DISABLE_MULTI_STEPPING
 
@@ -77,11 +77,7 @@
   #endif
 
   // S curve interpolation adds 40 cycles
-  #if ENABLED(S_CURVE_ACCELERATION)
-    #define ISR_S_CURVE_CYCLES 40UL
-  #else
-    #define ISR_S_CURVE_CYCLES 0UL
-  #endif
+  #define ISR_S_CURVE_CYCLES (s_curve_acceleration ? 40UL : 0UL)
 
   // Stepper Loop base cycles
   #define ISR_LOOP_BASE_CYCLES 4UL
@@ -104,12 +100,7 @@
     #define ISR_LA_BASE_CYCLES 0UL
   #endif
 
-  // S curve interpolation adds 160 cycles
-  #if ENABLED(S_CURVE_ACCELERATION)
-    #define ISR_S_CURVE_CYCLES 160UL
-  #else
-    #define ISR_S_CURVE_CYCLES 0UL
-  #endif
+  #define ISR_S_CURVE_CYCLES (s_curve_acceleration ? 160UL : 0UL)
 
   // Stepper Loop base cycles
   #define ISR_LOOP_BASE_CYCLES 32UL
@@ -202,7 +193,7 @@
 #endif
 
 // Now estimate the total ISR execution time in cycles given a step per ISR multiplier
-#define ISR_EXECUTION_CYCLES(R) (((ISR_BASE_CYCLES + ISR_S_CURVE_CYCLES + (ISR_LOOP_CYCLES) * (R) + ISR_LA_BASE_CYCLES + ISR_LA_LOOP_CYCLES)) / (R))
+#define ISR_EXECUTION_CYCLES(R) (uint32_t(((ISR_BASE_CYCLES + ISR_S_CURVE_CYCLES + (ISR_LOOP_CYCLES) * (R) + ISR_LA_BASE_CYCLES + ISR_LA_LOOP_CYCLES)) / (R)))
 
 // The maximum allowable stepping frequency when doing x128-x1 stepping (in Hz)
 #define MAX_STEP_ISR_FREQUENCY_128X ((F_CPU) / ISR_EXECUTION_CYCLES(128))
@@ -297,17 +288,15 @@ class Stepper {
       static int8_t active_extruder;      // Active extruder
     #endif
 
-    #if ENABLED(S_CURVE_ACCELERATION)
-      static int32_t bezier_A,     // A coefficient in Bézier speed curve
-                     bezier_B,     // B coefficient in Bézier speed curve
-                     bezier_C;     // C coefficient in Bézier speed curve
-      static uint32_t bezier_F,    // F coefficient in Bézier speed curve
-                      bezier_AV;   // AV coefficient in Bézier speed curve
-      #ifdef __AVR__
-        static bool A_negative;    // If A coefficient was negative
-      #endif
-      static bool bezier_2nd_half; // If Bézier curve has been initialized or not
+    static int32_t bezier_A,     // A coefficient in Bézier speed curve
+                   bezier_B,     // B coefficient in Bézier speed curve
+                   bezier_C;     // C coefficient in Bézier speed curve
+    static uint32_t bezier_F,    // F coefficient in Bézier speed curve
+                    bezier_AV;   // AV coefficient in Bézier speed curve
+    #ifdef __AVR__
+      static bool A_negative;    // If A coefficient was negative
     #endif
+    static bool bezier_2nd_half; // If Bézier curve has been initialized or not
 
     static uint32_t nextMainISR;   // time remaining for the next Step ISR
     #if ENABLED(LIN_ADVANCE)
@@ -318,9 +307,7 @@ class Stepper {
     #endif // LIN_ADVANCE
 
     static int32_t ticks_nominal;
-    #if DISABLED(S_CURVE_ACCELERATION)
-      static uint32_t acc_step_rate; // needed for deceleration start point
-    #endif
+    static uint32_t global_acc_step_rate; // needed for deceleration start point
 
     static volatile int32_t endstops_trigsteps[XYZ];
 
@@ -529,10 +516,8 @@ class Stepper {
       return timer;
     }
 
-    #if ENABLED(S_CURVE_ACCELERATION)
-      static void _calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av);
-      static int32_t _eval_bezier_curve(const uint32_t curr_step);
-    #endif
+    static void _calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av);
+    static int32_t _eval_bezier_curve(const uint32_t curr_step);
 
     #if HAS_DIGIPOTSS || HAS_MOTOR_CURRENT_PWM
       static void digipot_init();
