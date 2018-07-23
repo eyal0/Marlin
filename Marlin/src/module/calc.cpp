@@ -45,7 +45,7 @@ double min_pos[3] = { X_MIN_POS, Y_MIN_POS, Z_MIN_POS };
 double max_pos[3] = { X_MAX_POS, Y_MAX_POS, Z_MAX_POS };
 uint8_t active_extruder = 0;
 bool junction_deviation = false; // This replaces the JUNCTION_DEVIATION constant.
-bool s_curve_acceleration = true; // This replaces the S_CURVE_ACCELERATION constant.
+bool s_curve_acceleration = false; // This replaces the S_CURVE_ACCELERATION constant.
 //===========================================================================
 //=============================private variables=============================
 //===========================================================================
@@ -416,6 +416,7 @@ int blocks = 0;
 
 uint8_t last_direction_bits = 0;
 
+double old_filepos = -1;
 // Returns true if we found a block.
 bool idle() {
   total_timers[1] += compare[1] - timers[1] + 1;
@@ -424,6 +425,12 @@ bool idle() {
   block_t *block = Planner::get_current_block();
   if (block == NULL) {
     return false;
+  }
+  if (old_filepos != block->extra_data.filepos) {
+    printf("%.17f, %.17f, %.17f\n", block->extra_data.filepos,
+           block->extra_data.extruder_position,
+           double(total_timers[1])/27500000);
+    old_filepos = block->extra_data.filepos;
   }
   /*
   blocks++;
