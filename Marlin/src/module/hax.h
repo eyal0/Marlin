@@ -48,7 +48,7 @@ typedef int8_t pin_t;
 #define DISABLE_ISRS() do {} while(0)
 #define ENABLE_ISRS() do {} while(0)
 typedef uint16_t hal_timer_t;
-#define HAL_TIMER_TYPE_MAX 0xFFFF
+#define HAL_TIMER_TYPE_MAX hal_timer_t(0xFFFF)
 #define HAL_timer_set_compare(timer, compare) do {} while(0);
 #define STEPPER_TIMER_RATE      HAL_TIMER_RATE
 #define STEPPER_TIMER_TICKS_PER_US ((STEPPER_TIMER_RATE) / 1000000) // Cannot be of type double
@@ -155,6 +155,6 @@ typedef struct ExtraData {
 #define SET_OUTPUT(pin)
 
 //no output to serial anyway
-#define SERIAL_PROTOCOLPGM(x) do {} while(0)
-#define SERIAL_PROTOCOL(x) do {} while(0)
+#define SERIAL_PROTOCOLPGM(x) do {UNUSED(x);} while(0)
+#define SERIAL_PROTOCOL(x) do {UNUSED(x);} while(0)
 #define SERIAL_EOL() do {} while(0)
