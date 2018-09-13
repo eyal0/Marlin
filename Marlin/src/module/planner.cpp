@@ -1302,14 +1302,13 @@ void Planner::check_axes_activity() {
 
 #if DISABLED(NO_VOLUMETRICS)
 
-#if ENABLED(FILAMENT_WIDTH_SENSOR)
   /**
    * Get a volumetric multiplier from a filament diameter.
    * This is the reciprocal of the circular cross-section area.
    * Return 1.0 with volumetric off or a diameter of 0.0.
    */
   inline float calculate_volumetric_multiplier(const float &diameter) {
-    return (parser.volumetric_enabled && diameter) ? 1.0f / CIRCLE_AREA(diameter * 0.5f) : 1;
+    return (volumetric_enabled && diameter) ? 1.0f / CIRCLE_AREA(diameter * 0.5f) : 1;
   }
 
   /**
@@ -1322,7 +1321,7 @@ void Planner::check_axes_activity() {
       refresh_e_factor(i);
     }
   }
-#endif // ENABLED(FILAMENT_WIDTH_SENSOR)
+
 #endif // !NO_VOLUMETRICS
 
 #if ENABLED(FILAMENT_WIDTH_SENSOR)

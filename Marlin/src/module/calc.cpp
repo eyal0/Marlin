@@ -18,42 +18,32 @@
 //===========================================================================
 //float homing_feedrate[] = HOMING_FEEDRATE;
 bool axis_relative_modes[] = AXIS_RELATIVE_MODES;
-int feedmultiply=100; //100->1 200->2
-int saved_feedmultiply;
-int extruder_multiply[EXTRUDERS] = {100
-  #if EXTRUDERS > 1
-    , 100
-    #if EXTRUDERS > 2
-      , 100
-    #endif
-  #endif
-};
-float volumetric_multiplier[EXTRUDERS] = {1.0
-  #if EXTRUDERS > 1
-    , 1.0
-    #if EXTRUDERS > 2
-      , 1.0
-    #endif
-  #endif
-};
-float current_position[NUM_AXIS] = { 0.0, 0.0, 0.0, 0.0 };
+int16_t feedrate_percentage = 100; // In percent: 100->1 200->2
+float current_position[NUM_AXIS] = { 0.0, 0.0, 0.0, 0.0};
 #ifdef DELTA
 float endstop_adj[3]={0,0,0};
 #endif
 
-double min_pos[3] = { X_MIN_POS, Y_MIN_POS, Z_MIN_POS };
-double max_pos[3] = { X_MAX_POS, Y_MAX_POS, Z_MAX_POS };
+double min_pos_extruded[3] = { std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
+double max_pos_extruded[3] = { -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
 uint8_t active_extruder = 0;
 bool junction_deviation = false; // This replaces the JUNCTION_DEVIATION constant.
 bool s_curve_acceleration = false; // This replaces the S_CURVE_ACCELERATION constant.
+double filament_diameter[MAX_EXTRUDERS] = {
+  DEFAULT_NOMINAL_FILAMENT_DIA,
+  DEFAULT_NOMINAL_FILAMENT_DIA,
+  DEFAULT_NOMINAL_FILAMENT_DIA,
+  DEFAULT_NOMINAL_FILAMENT_DIA,
+  DEFAULT_NOMINAL_FILAMENT_DIA};
+bool volumetric_enabled = false;
 //===========================================================================
 //=============================private variables=============================
 //===========================================================================
-//const char axis_codes[NUM_AXIS] = {'X', 'Y', 'Z', 'E'};
+static double extrusion_length[MAX_EXTRUDERS] = {0,0,0,0,0};
 static double calc_destination[NUM_AXIS] = {  0.0, 0.0, 0.0, 0.0};
 //static double offset[3] = {0.0, 0.0, 0.0};
 //static bool home_all_axis = true;
-static double feedrate = 1500.0, next_feedrate;//, saved_feedrate;
+static double feedrate = 1500.0;
 long gcode_N, gcode_LastN;//, Stopped_gcode_LastN = 0;
 
 static char cmdbuffer[MAX_CMD_SIZE];
@@ -120,6 +110,7 @@ void recalculate_rates() {
   Planner::refresh_positioning();
   // steps per sq second need to be updated to agree with the units per sq second
   Planner::reset_acceleration_rates();
+  Planner::calculate_volumetric_multipliers(); // This also calls refresh_e_factor.
 }
 
 void Config_ResetDefault()
@@ -168,16 +159,24 @@ double extruder_position = 0;
 
 void prepare_move(const ExtraData& extra_data)
 {
-  //clamp_to_software_endstops(destination);
+  Planner::buffer_line(calc_destination[X_AXIS], calc_destination[Y_AXIS], calc_destination[Z_AXIS], calc_destination[E_AXIS], MMS_SCALED(feedrate/60), active_extruder, 0.0, extra_data);
 
-  // Do not use feedmultiply for E or Z only moves
-  if( (current_position[X_AXIS] == calc_destination [X_AXIS]) && (current_position[Y_AXIS] == calc_destination [Y_AXIS])) {
-    Planner::buffer_line(calc_destination[X_AXIS], calc_destination[Y_AXIS], calc_destination[Z_AXIS], calc_destination[E_AXIS], feedrate/60, active_extruder, 0.0, extra_data);
+  bool moved = calc_destination[X_AXIS] != current_position[X_AXIS] ||
+               calc_destination[Y_AXIS] != current_position[Y_AXIS] ||
+               calc_destination[Z_AXIS] != current_position[Z_AXIS];
+  int target_extruder = active_extruder;
+  if (code_seen('T')) {
+    target_extruder = code_value();
   }
-  else {
-    Planner::buffer_line(calc_destination[X_AXIS], calc_destination[Y_AXIS], calc_destination[Z_AXIS], calc_destination[E_AXIS], feedrate*feedmultiply/60/100.0, active_extruder, 0.0, extra_data);
+  double extruded = (calc_destination[E_AXIS] - current_position[E_AXIS]) * Planner::e_factor[target_extruder];
+  extruder_position += extruded;
+  if (extruded != 0 && moved) {
+    for (int i = 0; i < NUM_AXIS - 1; i++) {
+      min_pos_extruded[i] = min(min_pos_extruded[i], calc_destination[i]);
+      max_pos_extruded[i] = max(max_pos_extruded[i], calc_destination[i]);
+    }
   }
-  extruder_position += calc_destination[E_AXIS] - current_position[E_AXIS];
+  extrusion_length[target_extruder] += extruded;
   for(int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = calc_destination[i];
   }
@@ -193,7 +192,7 @@ void get_coordinates()
     else calc_destination[i] = current_position[i]; //Are these else lines really needed?
   }
   if(code_seen('F')) {
-    next_feedrate = code_value();
+    double next_feedrate = code_value();
     if(next_feedrate > 0.0) feedrate = next_feedrate;
   }
 }
@@ -247,7 +246,8 @@ void set_junction_deviation(bool new_value) {
 }
 
 // Return the axis from the axis code accounting for T codes that might
-// temporarily change the target tool.
+// temporarily change the target tool.  get_axis calls code_seen so be careful
+// if you call it between code_seen and code_value.
 int get_axis(int i) {
   if (i != E_AXIS) {
     return i;
@@ -255,7 +255,7 @@ int get_axis(int i) {
   if (code_seen('T')) {
     return E_AXIS + code_value();
   }
-  return active_extruder;
+  return E_AXIS + active_extruder;
 }
 
 void process_commands(const std::string& command, const ExtraData& extra_data) {
@@ -273,7 +273,7 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         prepare_move(extra_data);
         //ClearToSend();
         return;
-      } else printf("STOPPED!!");
+      } else fprintf(stderr, "STOPPED!!");
       //break;
     case 4: // G4 dwell
       codenum = 0;
@@ -283,8 +283,8 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
 	  total_time += codenum / 1000.0;
       break;
     case 28: //G28 Home all Axis one at a time
-	  total_time += 5; // 5 seconds to home
-		break;
+      total_time += 5; // 5 seconds to home
+      break;
     case 90: // G90
       for (int i = 0; i < 4; i++) {
         axis_relative_modes[i] = false;
@@ -298,18 +298,12 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
     case 92: // G92
       for(int8_t i=0; i < NUM_AXIS; i++) {
         if(code_seen(axis_codes[i])) {
-           if(i == E_AXIS) {
-             current_position[i] = code_value();
-             Planner::set_e_position_mm(current_position[E_AXIS]);
-           }
-           else {
-             current_position[i] = code_value();
-             Planner::set_position_mm(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
-           }
+          current_position[i] = code_value();
+          Planner::set_position_mm(AxisEnum(i), current_position[i]);
         }
       }
       break;
-	}
+    }
   } else if(code_seen('M')) {
     total_m++;
     switch((int)code_value()) {
@@ -322,17 +316,40 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
       case 92:
         {
           for (int i = 0; i < NUM_AXIS; i++) {
+            int axis = get_axis(i);
             if (code_seen(axis_codes[i])) {
-              Planner::axis_steps_per_mm[get_axis(i)] = code_value();
+              Planner::axis_steps_per_mm[axis] = code_value();
             }
           }
         }
         break;
+      case 200: // M200 - Set Filament Diameter
+        {
+          // The settings include this and then disable it if we're not in
+          // volumetic mode, which is hopefully everyone!
+          int target_extruder = active_extruder;
+          if (code_seen('T')) {
+            target_extruder = code_value();
+          }
+          if (code_seen('D')) {
+            if (code_value() != 0) {
+              filament_diameter[target_extruder] = code_value();
+              volumetric_enabled = true;  // Global for all extruders.
+              planner.set_filament_size(target_extruder, code_value());
+            } else {
+              // "M200 D" or "M200 D0", both turn off volumetic extrusion but
+              // we'll keep the filament_diamter that we learned.
+              volumetric_enabled = false;
+              planner.set_filament_size(target_extruder, code_value());
+            }
+          }
+        }
       case 201: // M201
         {
           for(int i = 0; i < NUM_AXIS; i++) {
+            int axis = get_axis(i);
             if(code_seen(axis_codes[i])) {
-              Planner::max_acceleration_mm_per_s2[get_axis(i)] = code_value();
+              Planner::max_acceleration_mm_per_s2[axis] = code_value();
             }
           }
         }
@@ -340,8 +357,9 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
       case 203: // M203 max feedrate mm/sec
         {
           for(int i=0; i < NUM_AXIS; i++) {
+            int axis = get_axis(i);
             if(code_seen(axis_codes[i])) {
-              Planner::max_feedrate_mm_s[get_axis(i)] = code_value();
+              Planner::max_feedrate_mm_s[axis] = code_value();
             }
           }
         }
@@ -391,7 +409,7 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         {
           if(code_seen('S'))
           {
-            feedmultiply = code_value();
+            feedrate_percentage = code_value();
           }
         }
         break;
@@ -403,12 +421,14 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
           }
           if(code_seen('S')) {
             Planner::flow_percentage[target_extruder] = code_value();
-            planner.refresh_e_factor(target_extruder);
           }
         }
         break;
     }
     recalculate_rates(); // M commands have the potential to affect planner calculations.
+  } else if (code_seen('T')) {
+    // Tool change
+    active_extruder = code_value();
   }
 }
 
@@ -457,7 +477,7 @@ bool idle() {
       tt4 += double(MINIMUM_STEPPER_DIR_DELAY)/1000/1000/1000;
     }
     total_time += tt1+tt2+tt3+tt4;
-    printf("%.17f, %.17f, %.17f\n", block->extra_data.filepos,
+    printf("Progress: %.17f, %.17f, %.17f\n", block->extra_data.filepos,
            block->extra_data.extruder_position,
            total_time);
   }
@@ -512,5 +532,31 @@ int main(int argc, char *argv[]) {
   printf("timer1: %f\n", double(total_timers[1])/27500000);
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
   fprintf(stderr, "Total time: %f\n", total_time);
+  printf("Analysis: {");
+  printf("\"estimatedPrintTime\": %.17f, ", total_time);
+  printf("\"printingArea\": ");
+  printf("{\"maxX\": %.17f, \"maxY\": %.17f, \"maxZ\": %.17f,",
+         max_pos_extruded[0], max_pos_extruded[1], max_pos_extruded[2]);
+  printf(" \"minX\": %.17f, \"minY\": %.17f, \"minZ\": %.17f}",
+         min_pos_extruded[0], min_pos_extruded[1], min_pos_extruded[2]);
+  printf(", \"dimensions\": {\"width\": %.17f, \"depth\": %.17f, \"height\": %.17f}, ",
+         max_pos_extruded[0] - min_pos_extruded[0],
+         max_pos_extruded[1] - min_pos_extruded[1],
+         max_pos_extruded[2] - min_pos_extruded[2]);
+  printf("\"filament\": {");
+  bool printed_tool = false;
+  for (int i = 0; i < MAX_EXTRUDERS; i++) {
+    if (extrusion_length[i]) {
+      if (printed_tool) {
+        printf(", ");
+      }
+      printf("\"tool%d\": {\"length\": %.17f, \"volume\": %.17f}", i,
+             extrusion_length[i], // in mm
+             extrusion_length[i] * filament_diameter[i]/2 * filament_diameter[i]/2 * M_PI / 1000 // in cm^3
+             );
+      printed_tool = true;
+    }
+  }
+  printf("}}\n");
   return 0;
 }

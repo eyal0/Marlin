@@ -64,6 +64,7 @@ uint64_t HAL_timer_get_count(const uint8_t timer_num);
 
 //#define FORCE_INLINE inline __attribute__((always_inline)) 
 #define NUM_AXIS 4
+#define MAX_EXTRUDERS EXTRUDERS
 
 #define min fmin
 #define max fmax
@@ -90,9 +91,14 @@ uint64_t HAL_timer_get_count(const uint8_t timer_num);
 #define enable_Y() do {} while(0)
 #define enable_Z() do {} while(0)
 #define enable_E0() do {} while(0)
+#define enable_E1() do {} while(0)
+#define enable_E2() do {} while(0)
+#define enable_E3() do {} while(0)
+#define enable_E4() do {} while(0)
 #define enable_e() do {} while(0)
 #define enable_e1() do {} while(0)
 #define enable_e2() do {} while(0)
+
 
 #define disable_x() do {} while(0)
 #define disable_y() do {} while(0)
@@ -102,6 +108,11 @@ uint64_t HAL_timer_get_count(const uint8_t timer_num);
 #define disable_e1() do {} while(0)
 #define disable_e2() do {} while(0)
 #define disable_all_steppers() do {} while(0)
+#define disable_E0() do { } while (0)
+#define disable_E1() do { } while (0)
+#define disable_E2() do { } while (0)
+#define disable_E3() do { } while (0)
+#define disable_E4() do { } while (0)
 
 #define MINIMUM_PLANNER_SPEED 0.05
 // (mm/sec)
