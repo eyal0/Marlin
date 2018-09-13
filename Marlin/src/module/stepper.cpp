@@ -87,7 +87,7 @@
 void Endstops::update() {}
 void Endstops::enable(bool x) {}
 #include "planner.h"
-#include "motion.h"
+//#include "motion.h"
 
 //#include "../module/temperature.h"
 //#include "../lcd/ultralcd.h"

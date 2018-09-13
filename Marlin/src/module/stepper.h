@@ -44,6 +44,7 @@
 #define STEPPER_H
 
 #include "../inc/MarlinConfig.h"
+#include "hax.h"
 #include "calc.h"
 // Disable multiple steps per ISR
 //#define DISABLE_MULTI_STEPPING
