@@ -485,8 +485,10 @@ bool idle() {
     return false;
   }
   if (old_filepos != block->extra_data.filepos) {
-    printf("%.17f, %.17f, %.17f\n", block->extra_data.filepos,
+    printf("Progress: %.17f, %.17f, %.17f\n", block->extra_data.filepos,
            block->extra_data.extruder_position,
+           total_time +
+           double(total_timers[0])/27500000 +
            double(total_timers[1])/27500000);
     old_filepos = block->extra_data.filepos;
   }
