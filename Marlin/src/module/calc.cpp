@@ -474,24 +474,34 @@ int blocks = 0;
 
 uint8_t last_direction_bits = 0;
 
+void print_progress(const block_t *block) {
+  printf("Progress: %.17f, %.17f, %.17f\n", block->extra_data.filepos,
+         block->extra_data.extruder_position,
+         total_time +
+         double(total_timers[0])/27500000 +
+         double(total_timers[1])/27500000);
+}
+
 double old_filepos = -1;
+block_t last_block;
+void maybe_print_progress(const block_t *block) {
+  if (old_filepos != block->extra_data.filepos) {
+    print_progress(block);
+    old_filepos = block->extra_data.filepos;
+  }
+}
+
 // Returns true if we found a block.
 bool idle() {
   total_timers[1] += compare[1] - timers[1] + 1;
   timers[1] = 0;
   Stepper::isr();
-  block_t *block = Planner::get_current_block();
+  const block_t *block = Planner::get_current_block();
   if (block == NULL) {
     return false;
   }
-  if (old_filepos != block->extra_data.filepos) {
-    printf("Progress: %.17f, %.17f, %.17f\n", block->extra_data.filepos,
-           block->extra_data.extruder_position,
-           total_time +
-           double(total_timers[0])/27500000 +
-           double(total_timers[1])/27500000);
-    old_filepos = block->extra_data.filepos;
-  }
+  last_block = *block;
+  maybe_print_progress(block);
 
   return true;
 }
@@ -538,10 +548,15 @@ int main(int argc, char *argv[]) {
   }
   while(idle())
     ; // Keep going.
+  // Print the final progress line.
+  if (old_filepos != -1) {
+    print_progress(&last_block);
+  }
   in.close();
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
   total_time += double(total_timers[0])/27500000 + double(total_timers[1])/27500000;
   fprintf(stderr, "Total time: %f\n", total_time);
+
   printf("Analysis: {");
   printf("\"estimatedPrintTime\": %.17f, ", total_time);
   printf("\"printingArea\": ");
