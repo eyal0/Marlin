@@ -96,15 +96,14 @@ uint64_t HAL_timer_get_count(const uint8_t timer_num);
 #define enable_X() do {} while(0)
 #define enable_Y() do {} while(0)
 #define enable_Z() do {} while(0)
+#define enable_e() do {} while(0)
 #define enable_E0() do {} while(0)
 #define enable_E1() do {} while(0)
 #define enable_E2() do {} while(0)
 #define enable_E3() do {} while(0)
 #define enable_E4() do {} while(0)
-#define enable_e() do {} while(0)
 #define enable_e1() do {} while(0)
 #define enable_e2() do {} while(0)
-
 
 #define disable_x() do {} while(0)
 #define disable_y() do {} while(0)
@@ -128,35 +127,17 @@ extern int extrudemultiply;
 
 #define F_CPU 16000000
 
-#define manage_heater()  do {} while(0)
-#define lcd_update()  do {} while(0)
+#define manage_heater() do {} while(0)
+#define lcd_update() do {} while(0)
 
 #define byte uint8_t
 
 // Fixes for missing stepper.h and stepper.cpp
 
 #define STEPPER_ISR_ENABLED() false  // TODO: Check if this affects anything.
-#define DISABLE_STEPPER_DRIVER_INTERRUPT()  do {} while(0)
-#define ENABLE_STEPPER_DRIVER_INTERRUPT()  do {} while(0)
-/*
-struct Stepper {
-  static bool is_block_busy(const void* const block) {
-    return false;
-  }
-  static void quick_stop() {}
-  static void endstop_triggered(const AxisEnum axis) {}
-  static int32_t triggered_position(const AxisEnum axis) {
-    return 0; // TODO: Check if this affects anything.
-  }
-  static int32_t position(const AxisEnum axis) {
-    return 0; // TODO: Check if this affects anything.
-  }
-  void wake_up() {}
-  inline static void set_position(const AxisEnum a, const int32_t &v) {}
-  inline static void set_position(const int32_t &a, const int32_t &b, const int32_t &c, const int32_t &e) {
-  }
-};
-*/
+#define DISABLE_STEPPER_DRIVER_INTERRUPT() do {} while(0)
+#define ENABLE_STEPPER_DRIVER_INTERRUPT() do {} while(0)
+
 typedef struct ExtraData {
   double filepos; // file position in percentage.
   double extruder_position; // Extruded so far.

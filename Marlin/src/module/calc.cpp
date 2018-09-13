@@ -29,7 +29,7 @@ double min_pos_extruded[3] = { std::numeric_limits<double>::infinity(), std::num
 double max_pos_extruded[3] = { -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()};
 uint8_t active_extruder = 0;
 bool junction_deviation = false; // This replaces the JUNCTION_DEVIATION constant.
-bool s_curve_acceleration = false; // This replaces the S_CURVE_ACCELERATION constant.
+bool s_curve_acceleration = true; // This replaces the S_CURVE_ACCELERATION constant.
 double filament_diameter[MAX_EXTRUDERS] = {
   DEFAULT_NOMINAL_FILAMENT_DIA,
   DEFAULT_NOMINAL_FILAMENT_DIA,
@@ -83,7 +83,6 @@ hal_timer_t timers[2] = {0,0};
 hal_timer_t compare[2] = {0,0};
 
 void HAL_timer_start(const uint8_t timer_num, const uint32_t frequency) {
-  printf("timer reset\n");
   UNUSED(frequency);
   timers[timer_num] = 0;
 }
@@ -491,36 +490,7 @@ bool idle() {
            double(total_timers[1])/27500000);
     old_filepos = block->extra_data.filepos;
   }
-  /*
-  blocks++;
-  if(blocks % 100000 == 0) { fprintf(stderr, "."); }
 
-  if (block->step_event_count > 0) {
-    // Useful equations: https://quizlet.com/45763821/sat-physics-equations-2-flash-cards/
-    double d = min(block->accelerate_until, 0); // Accelerate until this distance is past.
-    d = max(d, 0);
-    double tt1 = d * 2 / (block->cruise_rate + block->initial_rate);
-
-    d = min(block->decelerate_after, block->step_event_count) - d;
-    d = max(d, 0);
-    double tt2 = d / block->cruise_rate;
-
-    d = block->step_event_count - d;
-    d = max(d, 0);
-    double tt3 = d*2/(block->final_rate + block->cruise_rate);
-
-    double tt4 = 0;
-    if (block->direction_bits != last_direction_bits) {
-      last_direction_bits = block->direction_bits;
-      // MINIMUM_STEPPER_DIR_DELAY is in ns, described in Configuration_adv.h
-      tt4 += double(MINIMUM_STEPPER_DIR_DELAY)/1000/1000/1000;
-    }
-    total_time += tt1+tt2+tt3+tt4;
-    printf("Progress: %.17f, %.17f, %.17f\n", block->extra_data.filepos,
-           block->extra_data.extruder_position,
-           total_time);
-  }
-  Planner::discard_current_block();*/
   return true;
 }
 
@@ -567,9 +537,8 @@ int main(int argc, char *argv[]) {
   while(idle())
     ; // Keep going.
   in.close();
-  printf("timer0: %f\n", double(total_timers[0])/27500000);
-  printf("timer1: %f\n", double(total_timers[1])/27500000);
   fprintf(stderr, "Processed %d Gcodes and %d Mcodes. %d blocks\n", total_g, total_m, blocks);
+  total_time += double(total_timers[0])/27500000 + double(total_timers[1])/27500000;
   fprintf(stderr, "Total time: %f\n", total_time);
   printf("Analysis: {");
   printf("\"estimatedPrintTime\": %.17f, ", total_time);
