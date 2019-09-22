@@ -7,6 +7,10 @@ if int(debug):
 else:
   debug_flags = '-O2'
 
+profile = ARGUMENTS.get('profile', 0)
+if int(profile):
+  debug_flags += ' -pg'
+
 source_files = ['module/planner.cpp', 'module/calc.cpp', 'module/stepper.cpp', 'feature/fwretract.cpp']
 def add_program(env, target):
   env.Program(os.path.join(target, 'marlin-calc.' + target),
