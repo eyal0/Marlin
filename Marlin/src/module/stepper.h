@@ -289,15 +289,17 @@ class Stepper {
       static int8_t active_extruder;      // Active extruder
     #endif
 
-    static int32_t bezier_A,     // A coefficient in Bézier speed curve
-                   bezier_B,     // B coefficient in Bézier speed curve
-                   bezier_C;     // C coefficient in Bézier speed curve
-    static uint32_t bezier_F,    // F coefficient in Bézier speed curve
-                    bezier_AV;   // AV coefficient in Bézier speed curve
-    #ifdef __AVR__
-      static bool A_negative;    // If A coefficient was negative
+    #if ENABLED(S_CURVE_ACCELERATION)
+      static int32_t bezier_A,     // A coefficient in Bézier speed curve
+                     bezier_B,     // B coefficient in Bézier speed curve
+                     bezier_C;     // C coefficient in Bézier speed curve
+      static uint32_t bezier_F,    // F coefficient in Bézier speed curve
+                      bezier_AV;   // AV coefficient in Bézier speed curve
+      #ifdef __AVR__
+        static bool A_negative;    // If A coefficient was negative
+      #endif
+      static bool bezier_2nd_half; // If Bézier curve has been initialized or not
     #endif
-    static bool bezier_2nd_half; // If Bézier curve has been initialized or not
 
     static uint32_t nextMainISR;   // time remaining for the next Step ISR
     #if ENABLED(LIN_ADVANCE)
@@ -308,6 +310,9 @@ class Stepper {
     #endif // LIN_ADVANCE
 
     static int32_t ticks_nominal;
+    #if DISABLED(S_CURVE_ACCELERATION)
+      static uint32_t acc_step_rate; // needed for deceleration start point
+    #endif
     static uint32_t global_acc_step_rate; // needed for deceleration start point
 
     static volatile int32_t endstops_trigsteps[XYZ];
@@ -517,8 +522,10 @@ class Stepper {
       return timer;
     }
 
-    static void _calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av);
-    static int32_t _eval_bezier_curve(const uint32_t curr_step);
+    #if ENABLED(S_CURVE_ACCELERATION)
+      static void _calc_bezier_curve_coeffs(const int32_t v0, const int32_t v1, const uint32_t av);
+      static int32_t _eval_bezier_curve(const uint32_t curr_step);
+    #endif
 
     #if HAS_DIGIPOTSS || HAS_MOTOR_CURRENT_PWM
       static void digipot_init();

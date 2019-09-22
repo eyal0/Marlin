@@ -38,23 +38,23 @@ env = Environment(
 env.VariantDir('x86_64', 'src', duplicate=0)
 add_program(env, 'x86_64')
 
-#env = Environment(
-#    CXX='g++',
-#    CPPFLAGS= '-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu -MMD ' + debug_flags,
-#    LINKFLAGS='-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu ' + debug_flags)
+env = Environment(
+    CXX='g++',
+    CPPFLAGS= '-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu -MMD ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu ' + debug_flags)
 env.VariantDir('i686', 'src', duplicate=0)
 add_program(env, 'i686')
-#
-#env = Environment(
-#    CXX='arm-linux-gnueabi-g++',
-#    CPPFLAGS= '-Wall -static -std=gnu++11 -march=armv7 -mlittle-endian -MMD ' + debug_flags,
-#    LINKFLAGS='-Wall -static -std=gnu++11 -march=armv7 -mlittle-endian ' + debug_flags)
+
+env = Environment(
+    CXX='arm-linux-gnueabi-g++',
+    CPPFLAGS= '-Wall -static -std=gnu++11 -march=armv7 -mlittle-endian -MMD ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 -march=armv7 -mlittle-endian ' + debug_flags)
 env.VariantDir('armv7l', 'src', duplicate=0)
 add_program(env, 'armv7l')
-#
-#env = Environment(
-#    CXX='arm-linux-gnueabi-g++',
-#    CPPFLAGS= '-Wall -static -std=gnu++11 -march=armv6 -mlittle-endian -MMD ' + debug_flags,
-#    LINKFLAGS='-Wall -static -std=gnu++11 -march=armv6 -mlittle-endian ' + debug_flags)
+
+env = Environment(
+    CXX='arm-linux-gnueabi-g++',
+    CPPFLAGS= '-Wall -static -std=gnu++11 -march=armv6 -mlittle-endian -MMD ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 -march=armv6 -mlittle-endian ' + debug_flags)
 env.VariantDir('armv6l', 'src', duplicate=0)
 add_program(env, 'armv6l')
