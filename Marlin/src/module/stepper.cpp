@@ -101,7 +101,7 @@ void Endstops::enable(bool x) {}
 #include "../gcode/queue.h"
 #include "../sd/cardreader.h"
 //#include "../Marlin.h"
-#include "../HAL/shared/Delay.h"
+//#include "../HAL/shared/Delay.h"
 
 #if MB(ALLIGATOR)
   #include "../feature/dac/dac_dac084s085.h"
@@ -1458,7 +1458,14 @@ void Stepper::stepper_pulse_phase_isr() {
 
     // Pulse Extruders
     // Tick the E axis, correct error term and update position
-    if (linear_advance || ENABLED(MIXING_EXTRUDER)) {
+    bool enabled_mixing_extruder =
+    #if ENABLED(MIXING_EXTRUDER)
+      true
+    #else
+      false
+    #endif
+    ;
+    if (linear_advance || enabled_mixing_extruder) {
       delta_error[E_AXIS] += advance_dividend[E_AXIS];
       if (delta_error[E_AXIS] >= 0) {
         count_position[E_AXIS] += count_direction[E_AXIS];
@@ -1467,9 +1474,11 @@ void Stepper::stepper_pulse_phase_isr() {
           // Don't step E here - But remember the number of steps to perform
           motor_direction(E_AXIS) ? --LA_steps : ++LA_steps;
         } else { // !LIN_ADVANCE && MIXING_EXTRUDER
+          #if ENABLED(MIXING_EXTRUDER)
           // Don't adjust delta_error[E_AXIS] here!
           // Being positive is the criteria for ending the pulse.
           E_STEP_WRITE(mixer.get_next_stepper(), !INVERT_E_STEP_PIN);
+          #endif
         }
       }
     } else {

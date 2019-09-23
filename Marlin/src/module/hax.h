@@ -12,7 +12,7 @@ void manage_inactivity2();
 #include <inttypes.h>
 #include "../core/enum.h"
 #include "../inc/MarlinConfig.h"
-#include "../HAL/math_32bit.h"
+#include "../HAL/shared/math_32bit.h"
 
 //From motion.h
 #define MMS_SCALED(MM_S) ((MM_S)*feedrate_percentage*0.01f)
@@ -160,10 +160,12 @@ extern int16_t feedrate_percentage;
 // pins don't matter
 #define E0_DIR_PIN 0
 #define WRITE(x,y)
-#define HAL_STEP_TIMER_ISR void hal_step_timer_isr(void)
+#define HAL_STEP_TIMER_ISR void hal_step_timer_isr
 #define SET_OUTPUT(pin)
 
 //no output to serial anyway
 #define SERIAL_PROTOCOLPGM(x) do {UNUSED(x);} while(0)
 #define SERIAL_PROTOCOL(x) do {UNUSED(x);} while(0)
 #define SERIAL_EOL() do {} while(0)
+#define SERIAL_ECHOPGM(x) do {UNUSED(x);} while(0)
+#define SERIAL_ECHO(x) do {UNUSED(x);} while(0)
