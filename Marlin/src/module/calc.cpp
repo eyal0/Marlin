@@ -522,7 +522,7 @@ double old_filepos = -1;
 block_t last_block;
 void maybe_print_progress(const block_t *block) {
   if (old_filepos != block->extra_data.filepos) {
-    print_progress(block);
+    print_progress(&last_block);
     old_filepos = block->extra_data.filepos;
   }
 }
