@@ -316,7 +316,6 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
       }
       break;
     case 28: //G28 Home all Axis one at a time
-      total_time += 5; // 5 seconds to home
       break;
     case 90: // G90
       for (int i = 0; i < 4; i++) {
