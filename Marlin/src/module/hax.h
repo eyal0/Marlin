@@ -45,7 +45,6 @@ extern float current_position[XYZE];
 
 //From "../Marlin.cpp"
 extern bool idle();
-//#define idle()
 
 //From src/HAL/HAL_AVR/HAL.h
 typedef int8_t pin_t;
