@@ -10,13 +10,11 @@ void manage_inactivity2();
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include "../core/enum.h"
 #include "../inc/MarlinConfig.h"
 #include "../HAL/shared/math_32bit.h"
 
 //From motion.h
-#define MMS_SCALED(MM_S) ((MM_S)*feedrate_percentage*0.01f)
-extern float current_position[XYZE];
+extern xyze_pos_t current_position;
 #define SYNC_PLAN_POSITION_KINEMATIC()
 
 //From "../HAL/HAL_LPC1768/include/Arduino.h"
@@ -151,6 +149,11 @@ typedef struct ExtraData {
 // From motion.h for fwretract.*
 extern int16_t feedrate_percentage;
 
+// From src/core/serial.h
+#define SERIAL_CHAR(x)         do{}while(0)
+#define serialprintPGM(x)      do{}while(0)
+#define SERIAL_ECHOLNPAIR(x,y) do{}while(0)
+
 // From motion.cpp for fwretract.cpp
 #define sync_plan_position_e() Planner::set_e_position_mm(current_position[E_AXIS]);
 
@@ -168,3 +171,4 @@ extern int16_t feedrate_percentage;
 #define SERIAL_EOL() do {} while(0)
 #define SERIAL_ECHOPGM(x) do {UNUSED(x);} while(0)
 #define SERIAL_ECHO(x) do {UNUSED(x);} while(0)
+#define SERIAL_ECHOPAIR(a,b,c,d) do {UNUSED(a);UNUSED(b);UNUSED(c);UNUSED(d);} while(0)
