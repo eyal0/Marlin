@@ -40,3 +40,8 @@ jobs:
     - name: Build
       run: |
         scons -i -C Marlin -j ${NUM_CPUS}
+    - name: Export artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: out-${{ matrix.os }}
+        path: Marlin/out
