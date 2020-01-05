@@ -39,7 +39,7 @@ jobs:
         echo "::set-env name=NUM_CPUS::$((`sysctl -n hw.logicalcpu` * 4))"
     - name: Build
       run: |
-        scons -i -C Marlin -j ${NUM_CPUS}
+        scons -i -C Marlin
     - name: Export artifacts
       uses: actions/upload-artifact@v1
       with:
