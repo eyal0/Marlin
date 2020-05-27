@@ -132,8 +132,7 @@ bool code_seen(char code)
 
 double extruder_position = 0;
 
-void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s)
-{
+void prepare_move_to(const xyze_pos_t& destination, const ExtraData& extra_data, const feedRate_t &fr_mm_s) {
   Planner::buffer_line(destination[X_AXIS],
                        destination[Y_AXIS],
                        destination[Z_AXIS],
@@ -160,6 +159,10 @@ void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s)
   for (int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = destination[i];
   }
+}
+
+void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s) {
+  prepare_move_to(destination, extra_data, fr_mm_s);
 }
 
 void set_destination_from_current() {

@@ -208,13 +208,7 @@ void plan_arc(
       planner.apply_leveling(raw);
     #endif
 
-    if (!planner.buffer_line(raw, scaled_fr_mm_s, active_extruder, MM_PER_ARC_SEGMENT
-      #if ENABLED(SCARA_FEEDRATE_SCALING)
-        , inv_duration
-      #endif
-        , extra_data
-    ))
-      break;
+    prepare_move_to(raw, extra_data, scaled_fr_mm_s);
   }
 
   // Ensure last segment arrives at target location.
@@ -229,12 +223,7 @@ void plan_arc(
     planner.apply_leveling(raw);
   #endif
 
-  planner.buffer_line(raw, scaled_fr_mm_s, active_extruder, MM_PER_ARC_SEGMENT
-    #if ENABLED(SCARA_FEEDRATE_SCALING)
-      , inv_duration
-    #endif
-      , extra_data
-  );
+  prepare_move_to(raw, extra_data, scaled_fr_mm_s);
 
   #if ENABLED(AUTO_BED_LEVELING_UBL)
     raw[l_axis] = start_L;
@@ -324,7 +313,7 @@ void G2_G3(const bool clockwise, const ExtraData& extra_data) {
           //SERIAL_ERROR_MSG(MSG_ERR_ARC_ARGS);
         }
         while (circles_to_do--)
-        plan_arc(current_position, arc_offset, clockwise, extra_data);
+          plan_arc(current_position, arc_offset, clockwise, extra_data);
       #endif
 
       // Send the arc to the planner
