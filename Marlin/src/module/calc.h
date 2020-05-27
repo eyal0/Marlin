@@ -38,8 +38,8 @@ extern unsigned char active_extruder;
 void set_destination_from_current();
 extern double feedrate_mm_s;
 extern xyze_pos_t destination;
-extern void prepare_move_to(const xyze_pos_t& destination, const ExtraData& extra_data, const feedRate_t &fr_mm_s=0.0f);
-extern void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s=0.0f);
+extern void prepare_move_to(const xyze_pos_t& destination, const ExtraData& extra_data, const feedRate_t &fr_mm_s=0.0f, const float millimeters=0.0f);
+extern void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s=0.0f, const float millimeters=0.0f);
 #define prepare_internal_move_to_destination prepare_move
 
 #endif

@@ -208,7 +208,7 @@ void plan_arc(
       planner.apply_leveling(raw);
     #endif
 
-    prepare_move_to(raw, extra_data, scaled_fr_mm_s);
+    prepare_move_to(raw, extra_data, scaled_fr_mm_s, 0);
   }
 
   // Ensure last segment arrives at target location.
@@ -223,7 +223,7 @@ void plan_arc(
     planner.apply_leveling(raw);
   #endif
 
-  prepare_move_to(raw, extra_data, scaled_fr_mm_s);
+  prepare_move_to(raw, extra_data, scaled_fr_mm_s, 0);
 
   #if ENABLED(AUTO_BED_LEVELING_UBL)
     raw[l_axis] = start_L;
