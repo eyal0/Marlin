@@ -132,14 +132,13 @@ bool code_seen(char code)
 
 double extruder_position = 0;
 
-void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s)
-{
+void prepare_move_to(const xyze_pos_t& destination, const ExtraData& extra_data, const feedRate_t &fr_mm_s, float millimeters) {
   Planner::buffer_line(destination[X_AXIS],
                        destination[Y_AXIS],
                        destination[Z_AXIS],
                        destination[E_AXIS],
                        fr_mm_s == 0 ? MMS_SCALED(feedrate_mm_s) : fr_mm_s,
-                       active_extruder, 0.0, extra_data);
+                       active_extruder, millimeters, extra_data);
 
   bool moved = destination[X_AXIS] != current_position[X_AXIS] ||
                destination[Y_AXIS] != current_position[Y_AXIS] ||
@@ -160,6 +159,10 @@ void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s)
   for (int8_t i=0; i < NUM_AXIS; i++) {
     current_position[i] = destination[i];
   }
+}
+
+void prepare_move(const ExtraData& extra_data, const feedRate_t &fr_mm_s, float millimeters) {
+  prepare_move_to(destination, extra_data, fr_mm_s, millimeters);
 }
 
 void set_destination_from_current() {
@@ -274,6 +277,9 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         return;
       } else fprintf(stderr, "STOPPED!!");
       //break;
+    case 2:
+    case 3:
+      G2_G3(code_value() == 2, extra_data);
     case 4: // G4 dwell
       codenum = 0;
       if(code_seen('P')) codenum = code_value(); // milliseconds to wait
