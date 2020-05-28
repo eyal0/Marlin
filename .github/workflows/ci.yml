@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu, macos]
+    runs-on: ${{ matrix.os }}-latest
+
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v1
+      with:
+        fetch-depth: 2
+    - name: Setup paths and env
+      run: |
+        mkdir -p $HOME/.local/bin
+        mkdir -p $HOME/.local/lib/pkgconfig
+        echo "::set-env name=PKG_CONFIG_PATH::$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+        echo "::set-env name=LD_LIBRARY_PATH::$HOME/.local/lib:$LD_LIBRARY_PATH"
+        echo "::set-env name=PATH::$HOME/.local/bin:$PATH"
+    - name: Linux specific setup
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install libgtkmm-2.4-dev moreutils autopoint libc6-dbg
+        echo "::set-env name=NUM_CPUS::$((`nproc --all` * 4))"
+    - name: Set clang as default compiler
+      if: matrix.compiler == 'clang++'
+      run: |
+        echo "::set-env name=CC::`which clang`"
+        echo "::set-env name=CXX::`which clang++`"
+    - name: Macos specific setup
+      if: matrix.os == 'macos'
+      run: |
+        brew update
+    - name: Finalize setup
+      run: |
+        hash -r
+    - name: Make pcb2gcode
+      run: |
+        pushd Marlin
+        scons
+        popd
