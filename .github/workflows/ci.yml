@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - estimate-bugfix-2.0.x
+
+jobs:
+  build:
+    name: ${{ matrix.os }}-${{ matrix.bits }}
+    strategy:
+      matrix:
+        os: [ubuntu, macos]
+        bits: [64, 32]
+        exclude:
+          - os: macos
+            bits: 32
+    runs-on: ${{ matrix.os }}-latest
+
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+    - name: Setup paths and env
+      run: |
+        mkdir -p $HOME/.local/bin
+        mkdir -p $HOME/.local/lib/pkgconfig
+        echo "::set-env name=PKG_CONFIG_PATH::$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
+        echo "::set-env name=LD_LIBRARY_PATH::$HOME/.local/lib:$LD_LIBRARY_PATH"
+        echo "::set-env name=PATH::$HOME/.local/bin:$PATH"
+    - name: Linux specific setup
+      if: matrix.os == 'ubuntu'
+      run: |
+        sudo apt-get update
+        sudo apt-get install scons
+        echo "::set-env name=NUM_CPUS::$((`nproc --all` * 4))"
+    - name: Ubuntu 64 bit
+      if: matrix.os == 'ubuntu' && matrix.bits == 64
+      run: |
+        sudo apt-get install g++-mipsel-linux-gnu g++-arm-linux-gnueabi g++-aarch64-linux-gnu g++-mingw-w64
+    - name: Ubuntu 32 bit
+      if: matrix.os == 'ubuntu' && matrix.bits == 32
+      run: |
+        sudo apt-get install gcc-multilib g++-multilib
+    - name: Macos specific setup
+      if: matrix.os == 'macos'
+      run: |
+        brew update
+        brew install scons
+        echo "::set-env name=NUM_CPUS::$((`sysctl -n hw.logicalcpu` * 4))"
+    - name: Build
+      run: |
+        scons -i -C Marlin
+    - name: Export artifacts
+      uses: actions/upload-artifact@v1
+      with:
+        name: out-${{ matrix.os }}-${{ matrix.bits }}
+        path: Marlin/out
