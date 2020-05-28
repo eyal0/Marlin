@@ -163,7 +163,7 @@ void plan_arc(
   for (uint16_t i = 1; i < segments; i++) { // Iterate (segments-1) times
 
     //thermalManager.manage_heater();
-    if (true /* ELAPSED(millis(), next_idle_ms)*/) {
+    if (false /* ELAPSED(millis(), next_idle_ms)*/) {
       //next_idle_ms = millis() + 200UL;
       idle2();
     }
