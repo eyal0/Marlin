@@ -33,7 +33,7 @@ extern xyze_pos_t current_position;
 #define STEPPER_TIMER_RATE     HAL_TIMER_RATE   // frequency of stepper timer (HAL_TIMER_RATE / STEPPER_TIMER_PRESCALE)
 #define HAL_TIMER_RATE         ((SystemCoreClock) / 4)  // frequency of timers peripherals
 #define SystemCoreClock 110000000
-
+#define TEMP_TIMER_FREQUENCY 1000
 
 //From "../Marlin.cpp"
 extern bool idle2();
@@ -78,11 +78,28 @@ extern bool idle2();
 #define disable_x() do {} while(0)
 #define disable_y() do {} while(0)
 #define disable_z() do {} while(0)
+#define DISABLE_AXIS_X() do {} while(0)
+#define DISABLE_AXIS_Y() do {} while(0)
+#define DISABLE_AXIS_Z() do {} while(0)
+#define DISABLE_AXIS_E0() do {} while(0)
+#define DISABLE_AXIS_E1() do {} while(0)
+#define DISABLE_AXIS_E2() do {} while(0)
+#define DISABLE_AXIS_E3() do {} while(0)
+#define DISABLE_AXIS_E4() do {} while(0)
+#define ENABLE_AXIS_X() do {} while(0)
+#define ENABLE_AXIS_Y() do {} while(0)
+#define ENABLE_AXIS_Z() do {} while(0)
+#define ENABLE_AXIS_E0() do {} while(0)
+#define ENABLE_AXIS_E1() do {} while(0)
+#define ENABLE_AXIS_E2() do {} while(0)
+#define ENABLE_AXIS_E3() do {} while(0)
+#define ENABLE_AXIS_E4() do {} while(0)
 #define disable_e() do {} while(0)
 #define disable_e0() do {} while(0)
 #define disable_e1() do {} while(0)
 #define disable_e2() do {} while(0)
 #define disable_all_steppers() do {} while(0)
+#define disable_e_steppers() do {} while(0)
 #define disable_E0() do { } while (0)
 #define disable_E1() do { } while (0)
 #define disable_E2() do { } while (0)
@@ -111,6 +128,7 @@ struct Stepper {
   static bool is_block_busy(const void* const block) {
     return false;
   }
+  static bool suspend() { return false; }
   static void quick_stop() {}
   static void endstop_triggered(const AxisEnum axis) {}
   static int32_t triggered_position(const AxisEnum axis) {
@@ -136,6 +154,7 @@ typedef struct ExtraData {
 
 // From src/HAL/HAL_LINUX/include/Arduino.h
 #define PGM_P const char *
+#define PROGMEM
 
 // From motion.h for fwretract.*
 extern int16_t feedrate_percentage;
@@ -145,6 +164,7 @@ extern int16_t feedrate_percentage;
 #define SERIAL_ECHOPGM(x)      do{}while(0)
 #define serialprintPGM(x)      do{}while(0)
 #define SERIAL_ECHOLNPAIR(x,y) do{}while(0)
+#define SERIAL_ECHOLNPGM(x) do{}while(0)
 
 // From motion.cpp for fwretract.cpp
 #define sync_plan_position_e() Planner::set_e_position_mm(current_position[E_AXIS]);
