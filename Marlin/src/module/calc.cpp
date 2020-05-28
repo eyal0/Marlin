@@ -542,7 +542,7 @@ bool idle2() {
            block->extra_data.extruder_position,
            total_time);
   }
-  Planner::discard_current_block();
+  Planner::release_current_block();
   return true;
 }
 
