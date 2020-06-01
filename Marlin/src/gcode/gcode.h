@@ -396,7 +396,7 @@ private:
     #endif
   );
 
-  TERN_(ARC_SUPPORT, static void G2_G3(const bool clockwise));
+  TERN_(ARC_SUPPORT, static void G2_G3(const bool clockwise, const ExtraData& extra_data));
 
   static void G4();
 
