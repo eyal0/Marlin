@@ -119,8 +119,8 @@ void plan_arc(
   uint16_t segments = FLOOR(mm_of_travel / seg_length);
   if (segments < min_segments) {            // Too few segments?
     segments = min_segments;                // More segments
-    seg_length = mm_of_travel / segments;   // but also shorter
   }
+  seg_length = mm_of_travel / segments;
 
   /**
    * Vector rotation by transformation matrix: r is the original vector, r_T is the rotated vector,
@@ -153,8 +153,9 @@ void plan_arc(
   const float theta_per_segment = angular_travel / segments,
               linear_per_segment = linear_travel / segments,
               extruder_per_segment = extruder_travel / segments,
-              sin_T = theta_per_segment,
-              cos_T = 1 - 0.5f * sq(theta_per_segment); // Small angle approximation
+              sq_theta_per_segment = sq(theta_per_segment),
+              sin_T = theta_per_segment - sq_theta_per_segment*theta_per_segment/6,
+              cos_T = 1 - 0.5f * sq_theta_per_segment; // Small angle approximation
 
   // Initialize the linear axis
   raw[l_axis] = current_position[l_axis];
@@ -220,7 +221,7 @@ void plan_arc(
       planner.apply_leveling(raw);
     #endif
 
-    prepare_move_to(raw, extra_data, scaled_fr_mm_s, seg_length);
+    prepare_move_to(raw, extra_data, scaled_fr_mm_s, 0);
   }
 
   // Ensure last segment arrives at target location.
