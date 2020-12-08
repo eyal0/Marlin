@@ -153,6 +153,7 @@ typedef struct ExtraData {
 //From gcode.h
 #define reset_stepper_timeout() do {} while(0)
 void G2_G3(const bool clockwise, const ExtraData& extra_data);
+void M200();
 
 #define DRYRUN 1
 #define DEBUGGING(F) false

@@ -276,10 +276,11 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         //ClearToSend();
         return;
       } else fprintf(stderr, "STOPPED!!");
-      //break;
+      break;
     case 2:
     case 3:
       G2_G3(code_value() == 2, extra_data);
+      break;
     case 4: // G4 dwell
       codenum = 0;
       if(code_seen('P')) codenum = code_value(); // milliseconds to wait
@@ -349,25 +350,9 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         break;
       case 200: // M200 - Set Filament Diameter
         {
-          // The settings include this and then disable it if we're not in
-          // volumetic mode, which is hopefully everyone!
-          int target_extruder = active_extruder;
-          if (code_seen('T')) {
-            target_extruder = code_value();
-          }
-          if (code_seen('D')) {
-            if (code_value() != 0) {
-              filament_diameter[target_extruder] = code_value();
-              volumetric_enabled = true;  // Global for all extruders.
-              planner.set_filament_size(target_extruder, code_value());
-            } else {
-              // "M200 D" or "M200 D0", both turn off volumetic extrusion but
-              // we'll keep the filament_diamter that we learned.
-              volumetric_enabled = false;
-              planner.set_filament_size(target_extruder, code_value());
-            }
-          }
+          M200();
         }
+        break;
       case 201: // M201
         {
           for(int i = 0; i < NUM_AXIS; i++) {
