@@ -276,10 +276,11 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         //ClearToSend();
         return;
       } else fprintf(stderr, "STOPPED!!");
-      //break;
+      break;
     case 2:
     case 3:
       G2_G3(code_value() == 2, extra_data);
+      break;
     case 4: // G4 dwell
       codenum = 0;
       if(code_seen('P')) codenum = code_value(); // milliseconds to wait
@@ -349,88 +350,27 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         break;
       case 200: // M200 - Set Filament Diameter
         {
-          // The settings include this and then disable it if we're not in
-          // volumetic mode, which is hopefully everyone!
-          int target_extruder = active_extruder;
-          if (code_seen('T')) {
-            target_extruder = code_value();
-          }
-          if (code_seen('D')) {
-            if (code_value() != 0) {
-              filament_diameter[target_extruder] = code_value();
-              volumetric_enabled = true;  // Global for all extruders.
-              planner.set_filament_size(target_extruder, code_value());
-            } else {
-              // "M200 D" or "M200 D0", both turn off volumetic extrusion but
-              // we'll keep the filament_diamter that we learned.
-              volumetric_enabled = false;
-              planner.set_filament_size(target_extruder, code_value());
-            }
-          }
+          M200();
         }
+        break;
       case 201: // M201
         {
-          for(int i = 0; i < NUM_AXIS; i++) {
-            int axis = get_axis(i);
-            if(code_seen(axis_codes[i])) {
-              Planner::settings.max_acceleration_mm_per_s2[axis] = code_value();
-            }
-          }
+          M201();
         }
         break;
       case 203: // M203 max feedrate mm/sec
         {
-          for(int i=0; i < NUM_AXIS; i++) {
-            int axis = get_axis(i);
-            if(code_seen(axis_codes[i])) {
-              Planner::settings.max_feedrate_mm_s[axis] = code_value();
-            }
-          }
+          M203();
         }
         break;
       case 204: // M204 acclereration S normal moves T filmanent only moves
         {
-          if(code_seen('S')) {
-            Planner::settings.acceleration = code_value();
-            Planner::settings.travel_acceleration = code_value();
-          }
-          if(code_seen('P')) {
-            Planner::settings.acceleration = code_value();
-          }
-          if(code_seen('R')) {
-            Planner::settings.retract_acceleration = code_value();
-          }
-          if(code_seen('T')) {
-            Planner::settings.travel_acceleration = code_value();
-          }
+          M204();
         }
         break;
       case 205: //M205 advanced settings:  minimum travel speed S=while printing T=travel only,  B=minimum segment time X= maximum xy jerk, Z=maximum Z jerk
-        if(code_seen('B')) Planner::settings.min_segment_time_us = code_value();
-        if(code_seen('S')) Planner::settings.min_feedrate_mm_s = code_value();
-        if(code_seen('T')) Planner::settings.min_travel_feedrate_mm_s = code_value();
-
-        // jdev handling below taken from:
-        // Marlin/Marlin/src/gcode/config/M200-M205.cpp
-        for (unsigned int i=0; i < NUM_AXIS; i++) {
-          if (code_seen(axis_codes[i])) {
-            // Seeing any of XYZE implies that we have jdev disabled.
-            set_junction_deviation(false);
-            Planner::max_jerk[i] = code_value();
-          }
-        }
-        if(code_seen('J')) {
-          // Seeing junction deviation implies that we have jdev compiled.
-          set_junction_deviation(true);
-          const float junc_dev = code_value();
-          if (WITHIN(junc_dev, 0.01f, 0.3f)) {
-            Planner::junction_deviation_mm = junc_dev;
-            #if ENABLED(LIN_ADVANCE)
-              planner.recalculate_max_e_jerk();
-            #endif
-          } else {
-            fprintf(stderr, "M205 J value ignored: Out of range (0.01-0.3)\n");
-          }
+        {
+          M205();
         }
         break;
       case 207: //from M207-M209.cpp

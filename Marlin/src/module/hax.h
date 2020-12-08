@@ -153,6 +153,11 @@ typedef struct ExtraData {
 //From gcode.h
 #define reset_stepper_timeout() do {} while(0)
 void G2_G3(const bool clockwise, const ExtraData& extra_data);
+void M200();
+void M201();
+void M203();
+void M204();
+void M205();
 
 #define DRYRUN 1
 #define DEBUGGING(F) false
@@ -173,5 +178,8 @@ extern int16_t feedrate_percentage;
 
 // From motion.cpp for fwretract.cpp
 #define sync_plan_position_e() Planner::set_e_position_mm(current_position[E_AXIS]);
+
+//From src/HAL/HAL.h
+#define NUM_SERIAL 1
 
 #endif
