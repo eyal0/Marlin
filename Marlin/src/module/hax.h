@@ -174,4 +174,7 @@ extern int16_t feedrate_percentage;
 // From motion.cpp for fwretract.cpp
 #define sync_plan_position_e() Planner::set_e_position_mm(current_position[E_AXIS]);
 
+//From src/HAL/HAL.h
+#define NUM_SERIAL 1
+
 #endif

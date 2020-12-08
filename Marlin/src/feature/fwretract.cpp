@@ -16,7 +16,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
 
@@ -43,7 +43,7 @@ FWRetract fwretract; // Single instance - this calls the constructor
 
 // private:
 
-#if EXTRUDERS > 1
+#if HAS_MULTI_EXTRUDER
   bool FWRetract::retracted_swap[EXTRUDERS];          // Which extruders are swap-retracted
 #endif
 
@@ -74,9 +74,7 @@ void FWRetract::reset() {
 
   LOOP_L_N(i, EXTRUDERS) {
     retracted[i] = false;
-    #if EXTRUDERS > 1
-      retracted_swap[i] = false;
-    #endif
+    TERN_(HAS_MULTI_EXTRUDER, retracted_swap[i] = false);
     current_retract[i] = 0.0;
   }
 }
@@ -93,7 +91,7 @@ void FWRetract::reset() {
  *       included in the G-code. Use M207 Z0 to to prevent double hop.
  */
 void FWRetract::retract(const bool retracting, const ExtraData& extra_data
-  #if EXTRUDERS > 1
+  #if HAS_MULTI_EXTRUDER
     , bool swapping/*=false*/
   #endif
 ) {
@@ -101,7 +99,7 @@ void FWRetract::retract(const bool retracting, const ExtraData& extra_data
   if (retracted[active_extruder] == retracting) return;
 
   // Prevent two swap-retract or recovers in a row
-  #if EXTRUDERS > 1
+  #if HAS_MULTI_EXTRUDER
     // Allow G10 S1 only after G11
     if (swapping && retracted_swap[active_extruder] == retracting) return;
     // G11 priority to recover the long retract if activated
@@ -118,7 +116,7 @@ void FWRetract::retract(const bool retracting, const ExtraData& extra_data
     );
     LOOP_L_N(i, EXTRUDERS) {
       SERIAL_ECHOLNPAIR("retracted[", i, "] ", retracted[i]);
-      #if EXTRUDERS > 1
+      #if HAS_MULTI_EXTRUDER
         SERIAL_ECHOLNPAIR("retracted_swap[", i, "] ", retracted_swap[i]);
       #endif
     }
@@ -182,7 +180,7 @@ void FWRetract::retract(const bool retracting, const ExtraData& extra_data
   retracted[active_extruder] = retracting;                // Active extruder now retracted / recovered
 
   // If swap retract/recover update the retracted_swap flag too
-  #if EXTRUDERS > 1
+  #if HAS_MULTI_EXTRUDER
     if (swapping) retracted_swap[active_extruder] = retracting;
   #endif
 
@@ -192,7 +190,7 @@ void FWRetract::retract(const bool retracting, const ExtraData& extra_data
     SERIAL_ECHOLNPAIR("active_extruder ", active_extruder);
     LOOP_L_N(i, EXTRUDERS) {
       SERIAL_ECHOLNPAIR("retracted[", i, "] ", retracted[i]);
-      #if EXTRUDERS > 1
+      #if HAS_MULTI_EXTRUDER
         SERIAL_ECHOLNPAIR("retracted_swap[", i, "] ", retracted_swap[i]);
       #endif
     }
