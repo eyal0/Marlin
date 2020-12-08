@@ -25,15 +25,15 @@ jobs:
       run: |
         mkdir -p $HOME/.local/bin
         mkdir -p $HOME/.local/lib/pkgconfig
-        echo "::set-env name=PKG_CONFIG_PATH::$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
-        echo "::set-env name=LD_LIBRARY_PATH::$HOME/.local/lib:$LD_LIBRARY_PATH"
-        echo "::set-env name=PATH::$HOME/.local/bin:$PATH"
+        echo "PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=$HOME/.local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
     - name: Linux specific setup
       if: matrix.os == 'ubuntu'
       run: |
         sudo apt-get update
         sudo apt-get install scons
-        echo "::set-env name=NUM_CPUS::$((`nproc --all` * 4))"
+        echo "NUM_CPUS=$((`nproc --all` * 4))" >> $GITHUB_ENV
     - name: Ubuntu 64 bit
       if: matrix.os == 'ubuntu' && matrix.bits == 64
       run: |
@@ -47,7 +47,7 @@ jobs:
       run: |
         brew update
         brew install scons
-        echo "::set-env name=NUM_CPUS::$((`sysctl -n hw.logicalcpu` * 4))"
+        echo "NUM_CPUS=$((`sysctl -n hw.logicalcpu` * 4))" >> $GITHUB_ENV
     - name: Build
       run: |
         scons -i -C Marlin
