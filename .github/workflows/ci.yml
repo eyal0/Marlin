@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - estimate-bugfix-2.0.x
+  schedule:
+    - cron: '5 4 * * 1'
 
 jobs:
   build:
