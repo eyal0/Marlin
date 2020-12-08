@@ -145,58 +145,64 @@ void M204() {
   //}
 }
 
-//////**
-///// * M205: Set Advanced Settings
-///// *
-///// *    B = Min Segment Time (µs)
-///// *    S = Min Feed Rate (units/s)
-///// *    T = Min Travel Feed Rate (units/s)
-///// *    X = Max X Jerk (units/sec^2)
-///// *    Y = Max Y Jerk (units/sec^2)
-///// *    Z = Max Z Jerk (units/sec^2)
-///// *    E = Max E Jerk (units/sec^2)
-///// *    J = Junction Deviation (mm) (If not using CLASSIC_JERK)
-///// */
-/////void GcodeSuite::M205() {
-/////  #if HAS_JUNCTION_DEVIATION
-/////    #define J_PARAM  "J"
-/////  #else
-/////    #define J_PARAM
-/////  #endif
-/////  #if HAS_CLASSIC_JERK
-/////    #define XYZE_PARAM "XYZE"
-/////  #else
-/////    #define XYZE_PARAM
-/////  #endif
-/////  if (!parser.seen("BST" J_PARAM XYZE_PARAM)) return;
-/////
-/////  //planner.synchronize();
-/////  if (parser.seen('B')) planner.settings.min_segment_time_us = parser.value_ulong();
-/////  if (parser.seen('S')) planner.settings.min_feedrate_mm_s = parser.value_linear_units();
-/////  if (parser.seen('T')) planner.settings.min_travel_feedrate_mm_s = parser.value_linear_units();
-/////  #if HAS_JUNCTION_DEVIATION
-/////    if (parser.seen('J')) {
-/////      const float junc_dev = parser.value_linear_units();
-/////      if (WITHIN(junc_dev, 0.01f, 0.3f)) {
-/////        planner.junction_deviation_mm = junc_dev;
-/////        TERN_(LIN_ADVANCE, planner.recalculate_max_e_jerk());
-/////      }
-/////      else
-/////        SERIAL_ERROR_MSG("?J out of range (0.01 to 0.3)");
-/////    }
-/////  #endif
-/////  #if HAS_CLASSIC_JERK
-/////    if (parser.seen('X')) planner.set_max_jerk(X_AXIS, parser.value_linear_units());
-/////    if (parser.seen('Y')) planner.set_max_jerk(Y_AXIS, parser.value_linear_units());
-/////    if (parser.seen('Z')) {
-/////      planner.set_max_jerk(Z_AXIS, parser.value_linear_units());
-/////      #if HAS_MESH && DISABLED(LIMITED_JERK_EDITING)
-/////        if (planner.max_jerk.z <= 0.1f)
-/////          SERIAL_ECHOLNPGM("WARNING! Low Z Jerk may lead to unwanted pauses.");
-/////      #endif
-/////    }
-/////    #if HAS_CLASSIC_E_JERK
-/////      if (parser.seen('E')) planner.set_max_jerk(E_AXIS, parser.value_linear_units());
-/////    #endif
-/////  #endif
-/////}
+/**
+ * M205: Set Advanced Settings
+ *
+ *    B = Min Segment Time (µs)
+ *    S = Min Feed Rate (units/s)
+ *    T = Min Travel Feed Rate (units/s)
+ *    X = Max X Jerk (units/sec^2)
+ *    Y = Max Y Jerk (units/sec^2)
+ *    Z = Max Z Jerk (units/sec^2)
+ *    E = Max E Jerk (units/sec^2)
+ *    J = Junction Deviation (mm) (If not using CLASSIC_JERK)
+ */
+void M205() {
+  //#if HAS_JUNCTION_DEVIATION
+    #define J_PARAM  "J"
+  //#else
+    //#define J_PARAM
+  //#endif
+  //#if HAS_CLASSIC_JERK
+    #define XYZE_PARAM "XYZE"
+  //#else
+    //#define XYZE_PARAM
+  //#endif
+
+  //planner.synchronize();
+  if (code_seen('B')) planner.settings.min_segment_time_us = code_value();
+  if (code_seen('S')) planner.settings.min_feedrate_mm_s = code_value();
+  if (code_seen('T')) planner.settings.min_travel_feedrate_mm_s = code_value();
+  //#if HAS_JUNCTION_DEVIATION
+    if (code_seen('J')) {
+      const float junc_dev = code_value();
+      if (WITHIN(junc_dev, 0.01f, 0.3f)) {
+        set_junction_deviation(true);
+        planner.junction_deviation_mm = junc_dev;
+        TERN_(LIN_ADVANCE, planner.recalculate_max_e_jerk());
+      }
+      else
+        fprintf(stderr, "M205 J value ignored: ?J out of range (0.01 to 0.3)");
+    }
+  //#endif
+  //#if HAS_CLASSIC_JERK
+    LOOP_XYZE(i)
+    if (code_seen(axis_codes[i])) {
+      // Seeing any of XYZE implies that we have jdev disabled.
+      set_junction_deviation(false);
+    }
+
+    if (code_seen('X')) planner.set_max_jerk(X_AXIS, code_value());
+    if (code_seen('Y')) planner.set_max_jerk(Y_AXIS, code_value());
+    if (code_seen('Z')) {
+      planner.set_max_jerk(Z_AXIS, code_value());
+      //#if HAS_MESH && DISABLED(LIMITED_JERK_EDITING)
+      //  if (planner.max_jerk.z <= 0.1f)
+      //    SERIAL_ECHOLNPGM("WARNING! Low Z Jerk may lead to unwanted pauses.");
+      //#endif
+    }
+    //#if HAS_CLASSIC_E_JERK
+      if (code_seen('E')) planner.set_max_jerk(E_AXIS, code_value());
+    //#endif
+  //#endif
+}

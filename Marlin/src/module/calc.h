@@ -7,6 +7,7 @@
 void get_coordinates();
 bool code_seen(char code);
 double code_value();
+void set_junction_deviation(bool new_value);
 extern bool axis_relative_modes[];
 extern int feedmultiply;
 extern int extrudemultiply; // Sets extrude multiply factor (in percent) for all extruders

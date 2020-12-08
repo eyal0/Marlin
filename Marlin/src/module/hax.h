@@ -157,6 +157,7 @@ void M200();
 void M201();
 void M203();
 void M204();
+void M205();
 
 #define DRYRUN 1
 #define DEBUGGING(F) false
