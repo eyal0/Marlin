@@ -355,12 +355,7 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         break;
       case 201: // M201
         {
-          for(int i = 0; i < NUM_AXIS; i++) {
-            int axis = get_axis(i);
-            if(code_seen(axis_codes[i])) {
-              Planner::settings.max_acceleration_mm_per_s2[axis] = code_value();
-            }
-          }
+          M201();
         }
         break;
       case 203: // M203 max feedrate mm/sec

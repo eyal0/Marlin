@@ -76,29 +76,32 @@
 #endif // !NO_VOLUMETRICS
 
 
-//////**
-///// * M201: Set max acceleration in units/s^2 for print moves (M201 X1000 Y1000)
-///// *
-///// *       With multiple extruders use T to specify which one.
-///// */
-/////void GcodeSuite::M201() {
-/////
-/////  const int8_t target_extruder = get_target_extruder_from_command();
-/////  if (target_extruder < 0) return;
-/////
-/////  #ifdef XY_FREQUENCY_LIMIT
-/////    if (parser.seenval('F')) planner.set_frequency_limit(parser.value_byte());
-/////    if (parser.seenval('G')) planner.xy_freq_min_speed_factor = constrain(parser.value_float(), 1, 100) / 100;
-/////  #endif
-/////
-/////  LOOP_XYZE(i) {
-/////    if (parser.seen(axis_codes[i])) {
-/////      const uint8_t a = (i == E_AXIS ? uint8_t(E_AXIS_N(target_extruder)) : i);
-/////      planner.set_max_acceleration(a, parser.value_axis_units((AxisEnum)a));
-/////    }
-/////  }
-/////}
-/////
+/**
+ * M201: Set max acceleration in units/s^2 for print moves (M201 X1000 Y1000)
+ *
+ *       With multiple extruders use T to specify which one.
+ */
+void M201() {
+
+  int8_t target_extruder = active_extruder;
+  if (code_seen('T')) {
+    target_extruder = code_value();
+  }
+  if (target_extruder < 0) return;
+
+  #ifdef XY_FREQUENCY_LIMIT
+    if (code_seen('F')) planner.set_frequency_limit(parser.value_byte());
+    if (code_seen('G')) planner.xy_freq_min_speed_factor = constrain(parser.value_float(), 1, 100) / 100;
+  #endif
+
+  LOOP_XYZE(i) {
+    if (code_seen(axis_codes[i])) {
+      const uint8_t a = (i == E_AXIS ? uint8_t(E_AXIS_N(target_extruder)) : i);
+      planner.set_max_acceleration(a, code_value());
+    }
+  }
+}
+
 //////**
 ///// * M203: Set maximum feedrate that your machine can sustain (M203 X200 Y200 Z300 E10000) in units/sec
 ///// *
