@@ -102,23 +102,26 @@ void M201() {
   }
 }
 
-//////**
-///// * M203: Set maximum feedrate that your machine can sustain (M203 X200 Y200 Z300 E10000) in units/sec
-///// *
-///// *       With multiple extruders use T to specify which one.
-///// */
-/////void GcodeSuite::M203() {
-/////
-/////  const int8_t target_extruder = get_target_extruder_from_command();
-/////  if (target_extruder < 0) return;
-/////
-/////  LOOP_XYZE(i)
-/////    if (parser.seen(axis_codes[i])) {
-/////      const uint8_t a = (i == E_AXIS ? uint8_t(E_AXIS_N(target_extruder)) : i);
-/////      planner.set_max_feedrate(a, parser.value_axis_units((AxisEnum)a));
-/////    }
-/////}
-/////
+/**
+ * M203: Set maximum feedrate that your machine can sustain (M203 X200 Y200 Z300 E10000) in units/sec
+ *
+ *       With multiple extruders use T to specify which one.
+ */
+void M203() {
+
+  int8_t target_extruder = active_extruder;
+  if (code_seen('T')) {
+    target_extruder = code_value();
+  }
+  if (target_extruder < 0) return;
+
+  LOOP_XYZE(i)
+    if (code_seen(axis_codes[i])) {
+      const uint8_t a = (i == E_AXIS ? uint8_t(E_AXIS_N(target_extruder)) : i);
+      planner.set_max_feedrate(a, code_value());
+    }
+}
+
 //////**
 ///// * M204: Set Accelerations in units/sec^2 (M204 P1200 R3000 T3000)
 ///// *

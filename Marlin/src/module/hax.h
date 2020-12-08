@@ -155,6 +155,7 @@ typedef struct ExtraData {
 void G2_G3(const bool clockwise, const ExtraData& extra_data);
 void M200();
 void M201();
+void M203();
 
 #define DRYRUN 1
 #define DEBUGGING(F) false

@@ -360,12 +360,7 @@ void process_commands(const std::string& command, const ExtraData& extra_data) {
         break;
       case 203: // M203 max feedrate mm/sec
         {
-          for(int i=0; i < NUM_AXIS; i++) {
-            int axis = get_axis(i);
-            if(code_seen(axis_codes[i])) {
-              Planner::settings.max_feedrate_mm_s[axis] = code_value();
-            }
-          }
+          M203();
         }
         break;
       case 204: // M204 acclereration S normal moves T filmanent only moves
