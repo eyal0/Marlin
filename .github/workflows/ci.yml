@@ -39,7 +39,7 @@ jobs:
     - name: Ubuntu 64 bit
       if: matrix.os == 'ubuntu' && matrix.bits == 64
       run: |
-        sudo apt-get install g++-mipsel-linux-gnu g++-arm-linux-gnueabi g++-aarch64-linux-gnu g++-mingw-w64
+        sudo apt-get install g++-mipsel-linux-gnu g++-arm-linux-gnueabi g++-aarch64-linux-gnu g++-mingw-w64 g++-mingw-w64-i686
     - name: Ubuntu 32 bit
       if: matrix.os == 'ubuntu' && matrix.bits == 32
       run: |

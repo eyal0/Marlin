@@ -69,3 +69,9 @@ env = Environment(
     CPPFLAGS= '-Wall -static -std=gnu++11 ' + debug_flags,
     LINKFLAGS='-Wall -static -std=gnu++11 ' + debug_flags)
 add_program(env, 'windows-AMD64.exe')
+
+env = Environment(
+    CXX='i686-w64-mingw32-g++',
+    CPPFLAGS= '-Wall -static -std=gnu++11 ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 ' + debug_flags)
+add_program(env, 'windows-x86.exe')
