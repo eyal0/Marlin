@@ -27,12 +27,7 @@
 #include "../gcode.h"
 #include "../../feature/babystep.h"
 #include "../../module/probe.h"
-#include "../../module/temperature.h"
 #include "../../module/planner.h"
-
-#if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-  #include "../../core/serial.h"
-#endif
 
 #if ENABLED(MESH_BED_LEVELING)
   #include "../../feature/bedlevel/bedlevel.h"
@@ -40,17 +35,15 @@
 
 #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
 
-  FORCE_INLINE void mod_probe_offset(const float &offs) {
-    if (TERN1(BABYSTEP_HOTEND_Z_OFFSET, active_extruder == 0)) {
+  FORCE_INLINE void mod_probe_offset(const float offs) {
+    if (TERN1(BABYSTEP_HOTEND_Z_OFFSET, motion.extruder == 0)) {
       probe.offset.z += offs;
-      SERIAL_ECHO_START();
-      SERIAL_ECHOLNPAIR(STR_PROBE_OFFSET " " STR_Z, probe.offset.z);
+      SERIAL_ECHO_MSG(STR_PROBE_OFFSET " " STR_Z, probe.offset.z);
     }
     else {
       #if ENABLED(BABYSTEP_HOTEND_Z_OFFSET)
-        hotend_offset[active_extruder].z -= offs;
-        SERIAL_ECHO_START();
-        SERIAL_ECHOLNPAIR(STR_PROBE_OFFSET STR_Z ": ", hotend_offset[active_extruder].z);
+        motion.active_hotend_offset().z -= offs;
+        SERIAL_ECHO_MSG(STR_PROBE_OFFSET STR_Z ": ", motion.active_hotend_offset().z);
       #endif
     }
   }
@@ -72,12 +65,12 @@
  */
 void GcodeSuite::M290() {
   #if ENABLED(BABYSTEP_XY)
-    LOOP_XYZ(a)
-      if (parser.seenval(XYZ_CHAR(a)) || (a == Z_AXIS && parser.seenval('S'))) {
+    LOOP_NUM_AXES(a)
+      if (parser.seenval(AXIS_CHAR(a)) || (a == Z_AXIS && parser.seenval('S'))) {
         const float offs = constrain(parser.value_axis_units((AxisEnum)a), -2, 2);
         babystep.add_mm((AxisEnum)a, offs);
         #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-          if (a == Z_AXIS && (!parser.seen('P') || parser.value_bool())) mod_probe_offset(offs);
+          if (a == Z_AXIS && parser.boolval('P', true)) mod_probe_offset(offs);
         #endif
       }
   #else
@@ -85,41 +78,41 @@ void GcodeSuite::M290() {
       const float offs = constrain(parser.value_axis_units(Z_AXIS), -2, 2);
       babystep.add_mm(Z_AXIS, offs);
       #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-        if (!parser.seen('P') || parser.value_bool()) mod_probe_offset(offs);
+        if (parser.boolval('P', true)) mod_probe_offset(offs);
       #endif
     }
   #endif
 
-  if (!parser.seen("XYZ") || parser.seen('R')) {
-    SERIAL_ECHO_START();
-
+  if (!parser.seen(STR_AXES_MAIN) || parser.seen('R')) {
     #if ENABLED(BABYSTEP_ZPROBE_OFFSET)
-      SERIAL_ECHOLNPAIR(STR_PROBE_OFFSET " " STR_Z, probe.offset.z);
+      SERIAL_ECHO_MSG(STR_PROBE_OFFSET " " STR_Z, probe.offset.z);
     #endif
 
     #if ENABLED(BABYSTEP_HOTEND_Z_OFFSET)
     {
-      SERIAL_ECHOLNPAIR_P(
-        PSTR("Hotend "), int(active_extruder)
+      SERIAL_ECHO_START();
+      SERIAL_ECHOLNPGM_P(
+        PSTR("Hotend "), motion.extruder
         #if ENABLED(BABYSTEP_XY)
-          , PSTR("Offset X"), hotend_offset[active_extruder].x
-          , SP_Y_STR, hotend_offset[active_extruder].y
+          , PSTR("Offset X"), motion.active_hotend_offset().x
+          , SP_Y_STR, motion.active_hotend_offset().y
           , SP_Z_STR
         #else
           , PSTR("Offset Z")
         #endif
-        , hotend_offset[active_extruder].z
+        , motion.active_hotend_offset().z
       );
     }
     #endif
 
     #if ENABLED(MESH_BED_LEVELING)
-      SERIAL_ECHOLNPAIR("MBL Adjust Z", mbl.z_offset);
+      SERIAL_ECHO_MSG("MBL Adjust Z", bedlevel.z_offset);
     #endif
 
     #if ENABLED(BABYSTEP_DISPLAY_TOTAL)
     {
-      SERIAL_ECHOLNPAIR_P(
+      SERIAL_ECHO_START();
+      SERIAL_ECHOLNPGM_P(
         #if ENABLED(BABYSTEP_XY)
             PSTR("Babystep X"), babystep.axis_total[X_AXIS]
           , SP_Y_STR, babystep.axis_total[Y_AXIS]
@@ -133,5 +126,11 @@ void GcodeSuite::M290() {
     #endif
   }
 }
+
+#if ENABLED(EP_BABYSTEPPING) && DISABLED(EMERGENCY_PARSER)
+  // Without Emergency Parser M293/M294 will be added to the queue
+  void GcodeSuite::M293() { babystep.z_up(); }
+  void GcodeSuite::M294() { babystep.z_down(); }
+#endif
 
 #endif // BABYSTEPPING

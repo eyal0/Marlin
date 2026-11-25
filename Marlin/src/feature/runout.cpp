@@ -30,10 +30,14 @@
 
 #include "runout.h"
 
+#if ENABLED(CREALITY_RTS)
+  #include "../lcd/rts/lcd_rts.h"
+#endif
+
 FilamentMonitor runout;
 
 bool FilamentMonitorBase::enabled = true,
-     FilamentMonitorBase::filament_ran_out;  // = false
+     FilamentMonitorBase::filament_ran_out; // = false
 
 #if ENABLED(HOST_ACTION_COMMANDS)
   bool FilamentMonitorBase::host_handling; // = false
@@ -47,18 +51,23 @@ bool FilamentMonitorBase::enabled = true,
 
 #if HAS_FILAMENT_RUNOUT_DISTANCE
   float RunoutResponseDelayed::runout_distance_mm = FILAMENT_RUNOUT_DISTANCE_MM;
-  volatile float RunoutResponseDelayed::runout_mm_countdown[EXTRUDERS];
+  countdown_t RunoutResponseDelayed::mm_countdown;
   #if ENABLED(FILAMENT_MOTION_SENSOR)
     uint8_t FilamentSensorEncoder::motion_detected;
   #endif
+  #if ENABLED(FILAMENT_SWITCH_AND_MOTION)
+    Flags<NUM_RUNOUT_SENSORS> RunoutResponseDelayed::ignore_motion; // = 0
+    float RunoutResponseDelayed::motion_distance_mm = FILAMENT_MOTION_DISTANCE_MM;
+  #endif
 #else
-  int8_t RunoutResponseDebounced::runout_count; // = 0
+  int8_t RunoutResponseDebounced::runout_count[NUM_RUNOUT_SENSORS]; // = 0
 #endif
 
 //
 // Filament Runout event handler
 //
 #include "../MarlinCore.h"
+#include "pause.h"
 #include "../gcode/queue.h"
 
 #if ENABLED(HOST_ACTION_COMMANDS)
@@ -69,9 +78,12 @@ bool FilamentMonitorBase::enabled = true,
   #include "../lcd/extui/ui_api.h"
 #endif
 
-void event_filament_runout() {
+void event_filament_runout(const uint8_t extruder) {
+  if (TERN0(CREALITY_RTS, hmiFlag.G29_flag || hmiFlag.home_flag)) return;
 
-  if (TERN0(ADVANCED_PAUSE_FEATURE, did_pause_print)) return;  // Action already in progress. Purge triggered repeated runout.
+  runout.init_for_restart(false); // Reset and disable
+
+  if (paused_for_filament_change) return;  // Action already in progress. Purge triggered repeated runout.
 
   #if ENABLED(TOOLCHANGE_MIGRATION_FEATURE)
     if (migration.in_progress) {
@@ -84,51 +96,69 @@ void event_filament_runout() {
     }
   #endif
 
-  TERN_(EXTENSIBLE_UI, ExtUI::onFilamentRunout(ExtUI::getActiveTool()));
+  TERN_(EXTENSIBLE_UI, ExtUI::onFilamentRunout(ExtUI::getTool(extruder)));
 
-  #if EITHER(HOST_PROMPT_SUPPORT, HOST_ACTION_COMMANDS)
-    const char tool = '0'
-      #if NUM_RUNOUT_SENSORS > 1
-        + active_extruder
-      #endif
-    ;
+  #if ANY(HOST_PROMPT_SUPPORT, HOST_ACTION_COMMANDS, MULTI_FILAMENT_SENSOR)
+    const char tool = '0' + TERN0(MULTI_FILAMENT_SENSOR, extruder);
   #endif
 
   //action:out_of_filament
   #if ENABLED(HOST_PROMPT_SUPPORT)
-    host_action_prompt_begin(PROMPT_FILAMENT_RUNOUT, PSTR("FilamentRunout T"), tool);
-    host_action_prompt_show();
+    hostui.prompt_do(PROMPT_FILAMENT_RUNOUT, F("FilamentRunout T"), tool); //action:out_of_filament
   #endif
 
   const bool run_runout_script = !runout.host_handling;
 
+  TERN_(CREALITY_RTS, RTS_FilamentRanOut());
+
   #if ENABLED(HOST_ACTION_COMMANDS)
-    if (run_runout_script
-      && ( strstr(FILAMENT_RUNOUT_SCRIPT, "M600")
+
+    const bool park_or_pause = (false
+      #ifdef FILAMENT_RUNOUT_SCRIPT
+        || strstr(FILAMENT_RUNOUT_SCRIPT, "M600")
         || strstr(FILAMENT_RUNOUT_SCRIPT, "M125")
         || TERN0(ADVANCED_PAUSE_FEATURE, strstr(FILAMENT_RUNOUT_SCRIPT, "M25"))
-      )
-    ) {
-      host_action_paused(false);
+      #endif
+    );
+
+    if (run_runout_script && park_or_pause) {
+      hostui.paused(false);
     }
     else {
       // Legacy Repetier command for use until newer version supports standard dialog
       // To be removed later when pause command also triggers dialog
       #ifdef ACTION_ON_FILAMENT_RUNOUT
-        host_action(PSTR(ACTION_ON_FILAMENT_RUNOUT " T"), false);
+        hostui.action(F(ACTION_ON_FILAMENT_RUNOUT " T"), false);
         SERIAL_CHAR(tool);
         SERIAL_EOL();
       #endif
 
-      host_action_pause(false);
+      hostui.pause(false);
     }
     SERIAL_ECHOPGM(" " ACTION_REASON_ON_FILAMENT_RUNOUT " ");
     SERIAL_CHAR(tool);
     SERIAL_EOL();
+
   #endif // HOST_ACTION_COMMANDS
 
-  if (run_runout_script)
-    queue.inject_P(PSTR(FILAMENT_RUNOUT_SCRIPT));
+  #ifdef FILAMENT_RUNOUT_SCRIPT
+    if (run_runout_script) {
+      #if MULTI_FILAMENT_SENSOR
+        MString<strlen(FILAMENT_RUNOUT_SCRIPT)> script;
+        script.setf(F(FILAMENT_RUNOUT_SCRIPT), C(tool));
+        #if ENABLED(FILAMENT_RUNOUT_SENSOR_DEBUG)
+          SERIAL_ECHOLNPGM("Runout Command: ", &script);
+        #endif
+        queue.inject(&script);
+      #else
+        #if ENABLED(FILAMENT_RUNOUT_SENSOR_DEBUG)
+          SERIAL_ECHOPGM("Runout Command: ");
+          SERIAL_ECHOLNPGM(FILAMENT_RUNOUT_SCRIPT);
+        #endif
+        queue.inject(F(FILAMENT_RUNOUT_SCRIPT));
+      #endif
+    }
+  #endif
 }
 
 #endif // HAS_FILAMENT_SENSOR

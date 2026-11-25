@@ -2,6 +2,9 @@
  * Marlin 3D Printer Firmware
  * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -16,22 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
-#include <U8glib.h>
 
-#if defined(__AVR__) && ENABLED(NOT_EXTENDED_ISO10646_1_5X7)
+#include <U8glib-HAL.h>
+
+#if ALL(__AVR__, NOT_EXTENDED_ISO10646_1_5X7)
   // reduced font (only symbols 1 - 127) - saves about 1278 bytes of FLASH
 
-/*
-  Fontname: -Marlin6x12-Fixed-Medium-R-SemiCondensed--12-90-100-100-C-111-ISO10646-1
-  Copyright: Public domain terminal emulator font.  Share and enjoy. original font -Misc-Fixed-Medium-R-SemiCondensed--12-110-75-75-C-60-ISO10646-1
-  Capital A Height: 7, '1' Height: 7
-  Calculated Max Values w= 7 h=10 x= 5 y= 5 dx= 7 dy= 0 ascent= 8 len=10
-  Font Bounding box     w=12 h=15 x= 0 y=-2
-  Calculated Min Values           x= 0 y=-2 dx= 0 dy= 0
-  Pure Font   ascent = 7 descent=-2
-  X Font      ascent = 8 descent=-2
-  Max Font    ascent = 8 descent=-2
-*/
+/**
+ * Fontname: -Marlin6x12-Fixed-Medium-R-SemiCondensed--12-90-100-100-C-111-ISO10646-1
+ * Copyright: Public domain terminal emulator font.  Share and enjoy. original font -Misc-Fixed-Medium-R-SemiCondensed--12-110-75-75-C-60-ISO10646-1
+ * Capital A Height: 7, '1' Height: 7
+ * Calculated Max Values w= 7 h=10 x= 5 y= 5 dx= 7 dy= 0 ascent= 8 len=10
+ * Font Bounding box     w=12 h=15 x= 0 y=-2
+ * Calculated Min Values           x= 0 y=-2 dx= 0 dy= 0
+ * Pure Font   ascent = 7 descent=-2
+ * X Font      ascent = 8 descent=-2
+ * Max Font    ascent = 8 descent=-2
+ */
 const u8g_fntpgm_uint8_t ISO10646_1_5x7[1324] U8G_FONT_SECTION("ISO10646_1_5x7") = {
   0x00,0x0C,0x0F,0x00,0xFE,0x07,0x02,0x25,0x03,0xBB,0x01,0x7F,0xFE,0x08,0xFE,0x08,
   0xFE,0x05,0x08,0x08,0x06,0x00,0x00,0x40,0xF0,0xC8,0x88,0x88,0x98,0x78,0x10,0x05,
@@ -119,17 +123,17 @@ const u8g_fntpgm_uint8_t ISO10646_1_5x7[1324] U8G_FONT_SECTION("ISO10646_1_5x7")
 #else
   // extended (original) font (symbols 1 - 255)
 
-/*
-  Fontname: -Marlin6x12-Fixed-Medium-R-SemiCondensed--12-90-100-100-C-111-ISO10646-1
-  Copyright: Public domain terminal emulator font.  Share and enjoy. original font -Misc-Fixed-Medium-R-SemiCondensed--12-110-75-75-C-60-ISO10646-1
-  Capital A Height: 7, '1' Height: 7
-  Calculated Max Values w= 7 h=10 x= 5 y= 7 dx= 7 dy= 0 ascent=10 len=10
-  Font Bounding box     w=12 h=15 x= 0 y=-2
-  Calculated Min Values           x= 0 y=-2 dx= 0 dy= 0
-  Pure Font   ascent = 7 descent=-2
-  X Font      ascent = 8 descent=-2
-  Max Font    ascent =10 descent=-2
-*/
+/**
+ * Fontname: -Marlin6x12-Fixed-Medium-R-SemiCondensed--12-90-100-100-C-111-ISO10646-1
+ * Copyright: Public domain terminal emulator font.  Share and enjoy. original font -Misc-Fixed-Medium-R-SemiCondensed--12-110-75-75-C-60-ISO10646-1
+ * Capital A Height: 7, '1' Height: 7
+ * Calculated Max Values w= 7 h=10 x= 5 y= 7 dx= 7 dy= 0 ascent=10 len=10
+ * Font Bounding box     w=12 h=15 x= 0 y=-2
+ * Calculated Min Values           x= 0 y=-2 dx= 0 dy= 0
+ * Pure Font   ascent = 7 descent=-2
+ * X Font      ascent = 8 descent=-2
+ * Max Font    ascent =10 descent=-2
+ */
 const u8g_fntpgm_uint8_t ISO10646_1_5x7[2647] U8G_FONT_SECTION("ISO10646_1_5x7") = {
   0x00,0x0C,0x0F,0x00,0xFE,0x07,0x02,0x25,0x03,0xBB,0x01,0xFF,0xFE,0x0A,0xFE,0x08,
   0xFE,0x05,0x08,0x08,0x06,0x00,0x00,0x40,0xF0,0xC8,0x88,0x88,0x98,0x78,0x10,0x05,

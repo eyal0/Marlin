@@ -1,4 +1,26 @@
 /**
+ * Marlin 3D Printer Firmware
+ * Copyright (c) 2018 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ */
+
+/**
  * @file    u8g_fontutf8.cpp
  * @brief   font api for u8g lib
  * @author  Yunhui Fu (yhfudev@gmail.com)
@@ -12,7 +34,7 @@
 #if HAS_MARLINUI_U8GLIB
 
 #include <string.h>
-#include "../fontutils.h"
+#include "../utf8.h"
 #include "u8g_fontutf8.h"
 
 typedef void font_t;
@@ -60,11 +82,11 @@ static int fontgroup_init(font_group_t * root, const uxg_fontinfo_t * fntinfo, i
   return 0;
 }
 
-static const font_t* fontgroup_find(font_group_t * root, wchar_t val) {
-  uxg_fontinfo_t vcmp = {(uint16_t)(val / 128), (uint8_t)(val % 128 + 128), (uint8_t)(val % 128 + 128), 0, 0};
-  size_t idx = 0;
+static const font_t* fontgroup_find(font_group_t * root, const lchar_t &val) {
+  if (val <= 0xFF) return nullptr;
 
-  if (val < 256) return nullptr;
+  uxg_fontinfo_t vcmp = { uint16_t(val >> 7), uint8_t((val & 0x7F) + 0x80), uint8_t((val & 0x7F) + 0x80), 0, 0 };
+  size_t idx = 0;
 
   if (pf_bsearch_r((void*)root->m_fntifo, root->m_fntinfo_num, pf_bsearch_cb_comp_fntifo_pgm, (void*)&vcmp, &idx) < 0)
     return nullptr;
@@ -73,7 +95,7 @@ static const font_t* fontgroup_find(font_group_t * root, wchar_t val) {
   return vcmp.fntdata;
 }
 
-static void fontgroup_drawwchar(font_group_t *group, const font_t *fnt_default, wchar_t val, void * userdata, fontgroup_cb_draw_t cb_draw_ram) {
+static void fontgroup_drawwchar(font_group_t *group, const font_t *fnt_default, const lchar_t &val, void * userdata, fontgroup_cb_draw_t cb_draw_ram) {
   uint8_t buf[2] = {0, 0};
   const font_t * fntpqm = (font_t*)fontgroup_find(group, val);
   if (!fntpqm) {
@@ -104,12 +126,12 @@ static void fontgroup_drawwchar(font_group_t *group, const font_t *fnt_default, 
  * Get the screen pixel width of a ROM UTF-8 string
  */
 static void fontgroup_drawstring(font_group_t *group, const font_t *fnt_default, const char *utf8_msg, read_byte_cb_t cb_read_byte, void * userdata, fontgroup_cb_draw_t cb_draw_ram) {
-  uint8_t *p = (uint8_t*)utf8_msg;
+  const uint8_t *p = (uint8_t*)utf8_msg;
   for (;;) {
-    wchar_t val = 0;
-    p = get_utf8_value_cb(p, cb_read_byte, &val);
-    if (!val) break;
-    fontgroup_drawwchar(group, fnt_default, val, userdata, cb_draw_ram);
+    lchar_t wc;
+    p = get_utf8_value_cb(p, cb_read_byte, wc);
+    if (!wc) break;
+    fontgroup_drawwchar(group, fnt_default, wc, userdata, cb_draw_ram);
   }
 }
 
@@ -121,8 +143,8 @@ static font_group_t g_fontgroup_root = { nullptr, 0 };
  */
 static inline bool uxg_Utf8FontIsInited() { return flag_fontgroup_was_inited; }
 
-int uxg_SetUtf8Fonts (const uxg_fontinfo_t * fntinfo, int number) {
-  flag_fontgroup_was_inited = 1;
+int uxg_SetUtf8Fonts(const uxg_fontinfo_t *fntinfo, int number) {
+  flag_fontgroup_was_inited = true;
   return fontgroup_init(&g_fontgroup_root, fntinfo, number);
 }
 
@@ -149,19 +171,19 @@ static int fontgroup_cb_draw_u8g(void *userdata, const font_t *fnt_current, cons
 }
 
 /**
- * @brief Draw a wchar_t at the specified position
+ * @brief Draw a lchar_t at the specified position
  *
  * @param pu8g : U8G pointer
  * @param x : position x axis
  * @param y : position y axis
- * @param ch : the wchar_t
+ * @param wc : the lchar_t
  * @param max_width : the pixel width of the string allowed
  *
  * @return number of pixels advanced
  *
  * Draw a UTF-8 string at the specified position
  */
-unsigned int uxg_DrawWchar(u8g_t *pu8g, unsigned int x, unsigned int y, wchar_t ch, pixel_len_t max_width) {
+unsigned int uxg_DrawLchar(u8g_t *pu8g, unsigned int x, unsigned int y, const lchar_t &wc, pixel_len_t max_width) {
   struct _uxg_drawu8_data_t data;
   font_group_t *group = &g_fontgroup_root;
   const font_t *fnt_default = uxg_GetFont(pu8g);
@@ -176,7 +198,7 @@ unsigned int uxg_DrawWchar(u8g_t *pu8g, unsigned int x, unsigned int y, wchar_t 
   data.adv = 0;
   data.max_width = max_width;
   data.fnt_prev = nullptr;
-  fontgroup_drawwchar(group, fnt_default, ch, (void*)&data, fontgroup_cb_draw_u8g);
+  fontgroup_drawwchar(group, fnt_default, wc, (void*)&data, fontgroup_cb_draw_u8g);
   u8g_SetFont(pu8g, (const u8g_fntpgm_uint8_t*)fnt_default);
 
   return data.adv;
@@ -278,7 +300,7 @@ int uxg_GetUtf8StrPixelWidth(u8g_t *pu8g, const char *utf8_msg) {
 
   if (!uxg_Utf8FontIsInited()) return -1;
 
-  memset(&data, 0, sizeof(data));
+  OBJZERO(data);
   data.pu8g = pu8g;
   data.adv = 0;
   fontgroup_drawstring(group, fnt_default, utf8_msg, read_byte_ram, (void*)&data, fontgroup_cb_draw_u8gstrlen);
@@ -304,7 +326,7 @@ int uxg_GetUtf8StrPixelWidthP(u8g_t *pu8g, PGM_P utf8_msg) {
 
   if (!uxg_Utf8FontIsInited()) return -1;
 
-  memset(&data, 0, sizeof(data));
+  OBJZERO(data);
   data.pu8g = pu8g;
   data.adv = 0;
   fontgroup_drawstring(group, fnt_default, utf8_msg, read_byte_rom, (void*)&data, fontgroup_cb_draw_u8gstrlen);

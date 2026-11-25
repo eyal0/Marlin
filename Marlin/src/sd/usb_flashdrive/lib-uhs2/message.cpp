@@ -25,7 +25,7 @@
 
 #include "../../../inc/MarlinConfigPre.h"
 
-#if ENABLED(USB_FLASH_DRIVE_SUPPORT) && DISABLED(USE_UHS3_USB)
+#if ALL(HAS_USB_FLASH_DRIVE, USE_UHS2_USB)
 
 #include "Usb.h"
 
@@ -59,7 +59,7 @@ void E_NotifyStr(char const * msg, int lvl) {
 void E_Notify(uint8_t b, int lvl) {
   if (UsbDEBUGlvl < lvl) return;
   USB_HOST_SERIAL.print(b
-    #if !defined(ARDUINO) || ARDUINO < 100
+    #if !defined(ARDUINO) && !defined(ARDUINO_ARCH_LPC176X)
       , DEC
     #endif
   );
@@ -125,4 +125,4 @@ void E_Notify(double d, int lvl) {
 
 #endif // DEBUG_USB_HOST
 
-#endif // USB_FLASH_DRIVE_SUPPORT
+#endif // HAS_USB_FLASH_DRIVE && USE_UHS2_USB

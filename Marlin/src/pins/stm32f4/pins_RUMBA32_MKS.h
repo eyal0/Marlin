@@ -35,9 +35,9 @@
 
 #define BOARD_INFO_NAME "MKS RUMBA32"
 
-#if NO_EEPROM_SELECTED
+#if SHALL_USE_EEPROM(FLASH_EEPROM_EMULATION)
   #define FLASH_EEPROM_EMULATION
-  #define MARLIN_EEPROM_SIZE              0x1000  // 4KB
+  #define MARLIN_EEPROM_SIZE             0x1000U  // 4K
 #endif
 
 #if ENABLED(FLASH_EEPROM_EMULATION)
@@ -67,9 +67,6 @@
   //#define E3_HARDWARE_SERIAL Serial1
   //#define E4_HARDWARE_SERIAL Serial1
 
-  //
-  // Software serial
-  //
   #define X_SERIAL_TX_PIN                   PA3
   #define X_SERIAL_RX_PIN                   PC14
 

@@ -22,8 +22,8 @@
 
 #include "../gcode.h"
 
-#include "../../lcd/marlinui.h" // for lcd_reset_alert_level
-#include "../../MarlinCore.h"   // for marlin_state
+#include "../../lcd/marlinui.h" // for ui.reset_alert_level
+#include "../../MarlinCore.h"   // for setState
 #include "../queue.h"           // for flush_and_request_resend
 
 /**
@@ -36,10 +36,10 @@
  * existing command buffer.
  */
 void GcodeSuite::M999() {
-  marlin_state = MF_RUNNING;
+  marlin.setState(MF_RUNNING);
   ui.reset_alert_level();
 
   if (parser.boolval('S')) return;
 
-  queue.flush_and_request_resend();
+  queue.flush_and_request_resend(queue.ring_buffer.command_port());
 }

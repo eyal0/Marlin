@@ -50,11 +50,13 @@ typedef struct {
   laser_t bullet[10], laser, explod;
   int8_t dir, leftmost, rightmost, botmost;
   uint8_t count, quit_count, blink_count;
+  bool quit_confirm;
+  int8_t quit_sel;  // -1=none selected, 0=Y selected, 1=N selected
   uint8_t bugs[INVADER_ROWS], shooters[(INVADER_ROWS) * (INVADER_COLS)];
   int8_t ufox, ufov;
   bool game_blink;
-  int8_t laser_col() { return ((laser.x - pos.x) / (INVADER_COL_W)); };
-  int8_t laser_row() { return ((laser.y - pos.y + 2) / (INVADER_ROW_H)); };
+  int8_t laser_col() { return ((laser.x - pos.x) / (INVADER_COL_W)); }
+  int8_t laser_row() { return ((laser.y - pos.y + 2) / (INVADER_ROW_H)); }
 } invaders_data_t;
 
 class InvadersGame : MarlinGame { public: static void enter_game(), game_screen(); };

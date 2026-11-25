@@ -51,30 +51,18 @@
  */
 
 /**
- * Rev B    26 DEC 2016
- *
- * added pointer to a current Arduino IDE extension
- */
-
-/**
- * A useable Arduino IDE extension (board manager) can be found at
+ * Requires this Arduino IDE extension for Boards Manager:
  * https://github.com/Lauszus/Sanguino
  *
- * This extension has been tested on Arduino 1.6.12 & 1.8.0
- *
- * Here's the JSON path:
+ * Follow the installation instructions at https://learn.sparkfun.com/tutorials/installing-board-definitions-in-the-arduino-ide
+ * Just use this JSON URL instead of Sparkfun's:
  * https://raw.githubusercontent.com/Lauszus/Sanguino/master/package_lauszus_sanguino_index.json
  *
- * When installing select 1.0.2
- *
- * Installation instructions can be found at https://learn.sparkfun.com/pages/CustomBoardsArduino
- * Just use the above JSON URL instead of Sparkfun's JSON.
- *
- * Once installed select the Sanguino board and then select the CPU.
+ * Once installed select the SANGUINO board and then select the CPU.
  */
 
 #if NOT_TARGET(__AVR_ATmega644__)
-  #error "Oops! Select 'Sanguino' in 'Tools > Board' and ATmega644 in 'Tools > Processor.'"
+  #error "Oops! Select 'Sanguino' in 'Tools > Board' and 'ATmega644' in 'Tools > Processor.'"
 #endif
 
 #define BOARD_INFO_NAME "Alpha OMCA"
@@ -123,13 +111,13 @@
 //
 #define HEATER_0_PIN                           4
 
-#ifndef FAN_PIN
-  #define FAN_PIN                              3
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             3
 #endif
 
 //
 // Misc. Functions
 //
-#define SDSS                                  11
+#define SD_SS_PIN                             11
 
 /*  Unused (1) (2) (3) 4 5 6 7 8 9 10 11 12 13 (14) (15) (16) 17 (18) (19) (20) (21) (22) (23) 24 (25) (26) (27) 28 (29) (30) (31)  */

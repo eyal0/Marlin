@@ -21,17 +21,23 @@
  */
 #pragma once
 
-#ifdef ARDUINO_ARCH_ESP32
-
 #include <HardwareSerial.h>
 
-class FlushableHardwareSerial : public HardwareSerial {
-public:
-  FlushableHardwareSerial(int uart_nr);
+#include "../shared/Marduino.h"
+#include "../../core/serial_hook.h"
 
-  inline void flushTX() { /* No need to flush the hardware serial, but defined here for compatibility. */ }
+#if ENABLED(EMERGENCY_PARSER)
+  #include "SerialRxTask.h"
+  class FlushableHardwareSerial;
+  typedef SerialRxTask<HardwareSerial, FlushableHardwareSerial> FlushableBaseSerial;
+#else
+  typedef HardwareSerial FlushableBaseSerial;
+#endif
+
+class FlushableHardwareSerial : public FlushableBaseSerial {
+public:
+  FlushableHardwareSerial(int uart_nr) : FlushableBaseSerial(uart_nr) {}
 };
 
-extern FlushableHardwareSerial flushableSerial;
-
-#endif // ARDUINO_ARCH_ESP32
+extern Serial1Class<FlushableHardwareSerial> flushableSerial;
+extern Serial1Class<FlushableHardwareSerial> flushableSerial2;

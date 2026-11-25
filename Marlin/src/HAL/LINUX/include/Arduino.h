@@ -59,10 +59,9 @@ typedef uint8_t byte;
 #endif
 
 #define sq(v) ((v) * (v))
-#define square(v) sq(v)
 #define constrain(value, arg_min, arg_max) ((value) < (arg_min) ? (arg_min) :((value) > (arg_max) ? (arg_max) : (value)))
 
-//Interrupts
+// Interrupts
 void cli(); // Disable
 void sei(); // Enable
 void attachInterrupt(uint32_t pin, void (*callback)(), uint32_t mode);
@@ -73,34 +72,12 @@ extern "C" {
   void GpioDisableInt(uint32_t port, uint32_t pin);
 }
 
-// Program Memory
-#define pgm_read_ptr(addr)        (*((void**)(addr)))
-#define pgm_read_byte_near(addr)  (*((uint8_t*)(addr)))
-#define pgm_read_float_near(addr) (*((float*)(addr)))
-#define pgm_read_word_near(addr)  (*((uint16_t*)(addr)))
-#define pgm_read_dword_near(addr) (*((uint32_t*)(addr)))
-#define pgm_read_byte(addr)       pgm_read_byte_near(addr)
-#define pgm_read_float(addr)      pgm_read_float_near(addr)
-#define pgm_read_word(addr)       pgm_read_word_near(addr)
-#define pgm_read_dword(addr)      pgm_read_dword_near(addr)
-
-using std::memcpy;
-#define memcpy_P memcpy
-#define sprintf_P sprintf
-#define strstr_P strstr
-#define strncpy_P strncpy
-#define vsnprintf_P vsnprintf
-#define strcpy_P strcpy
-#define snprintf_P snprintf
-#define strlen_P strlen
-
 // Time functions
-extern "C" void delay(const int milis);
-void _delay_ms(const int delay);
+extern "C" void delay(const int ms);
 void delayMicroseconds(unsigned long);
-uint32_t millis();
+unsigned long millis();
 
-//IO functions
+// IO functions
 void pinMode(const pin_t, const uint8_t);
 void digitalWrite(pin_t, uint8_t);
 bool digitalRead(pin_t);

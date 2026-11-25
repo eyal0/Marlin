@@ -22,21 +22,33 @@
 
 #include "../../inc/MarlinConfig.h"
 
-#if ENABLED(SDSUPPORT)
+#if HAS_MEDIA
 
 #include "../gcode.h"
 #include "../../sd/cardreader.h"
+
+#if ENABLED(EXTENSIBLE_UI)
+  #include "../../lcd/extui/ui_api.h"
+#endif
 
 /**
  * M524: Abort the current SD print job (started with M24)
  */
 void GcodeSuite::M524() {
 
-  if (IS_SD_PRINTING())
-    card.flag.abort_sd_printing = true;
-  else if (card.isMounted())
-    card.closefile();
+  #if ENABLED(EXTENSIBLE_UI)
+
+    ExtUI::stopPrint(); // Calls ui.abort_print() which does the same as below
+
+  #else
+
+    if (card.isStillPrinting())
+      card.abortFilePrintSoon();
+    else if (card.isMounted())
+      card.closefile();
+
+  #endif
 
 }
 
-#endif // SDSUPPORT
+#endif // HAS_MEDIA

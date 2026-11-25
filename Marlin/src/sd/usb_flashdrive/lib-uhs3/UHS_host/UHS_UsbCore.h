@@ -59,7 +59,6 @@ e-mail   :  support@circuitsathome.com
 // D6-5         Type (0- standard, 1 - class, 2 - vendor, 3 - reserved)
 // D4-0         Recipient (0 - device, 1 - interface, 2 - endpoint, 3 - other, 4..31 - reserved)
 
-
 // TO-DO: Use the python script to generate these.
 // TO-DO: Add _all_ subclasses here.
 // USB Device Classes, Subclasses and Protocols
@@ -165,7 +164,6 @@ e-mail   :  support@circuitsathome.com
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 /* USB state machine states */
 #define                       UHS_USB_HOST_STATE_MASK 0xF0U
 
@@ -248,7 +246,7 @@ e-mail   :  support@circuitsathome.com
 #define                      UHS_HOST_TRANSFER_MAX_MS 10000 // USB transfer timeout in ms, per section 9.2.6.1 of USB 2.0 spec
 #define               UHS_HOST_TRANSFER_RETRY_MAXIMUM 3     // 3 retry limit for a transfer
 #define                    UHS_HOST_DEBOUNCE_DELAY_MS 500   // settle delay in milliseconds
-#define                        UHS_HUB_RESET_DELAY_MS 20    // hub port reset delay, 10ms recomended, but can be up to 20ms
+#define                        UHS_HUB_RESET_DELAY_MS 20    // hub port reset delay, 10ms recommended, but can be up to 20ms
 
 //
 // We only provide the minimum needed information for enumeration.
@@ -323,7 +321,6 @@ typedef struct {
         uint16_t wLength;
         // 8 bytes total
 } __attribute__((packed)) SETUP_PKT, *PSETUP_PKT;
-
 
 // little endian :-)                                                                             8                                8                          8                         8                          16                      16
 #define mkSETUP_PKT8(bmReqType, bRequest, wValLo, wValHi, wInd, total) ((uint64_t)(((uint64_t)(bmReqType)))|(((uint64_t)(bRequest))<<8)|(((uint64_t)(wValLo))<<16)|(((uint64_t)(wValHi))<<24)|(((uint64_t)(wInd))<<32)|(((uint64_t)(total)<<48)))

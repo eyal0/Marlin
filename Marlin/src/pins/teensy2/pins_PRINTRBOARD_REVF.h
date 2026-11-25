@@ -25,6 +25,13 @@
  *  Rev B  2 JUN 2017
  *
  *  Converted to Arduino pin numbering
+ *
+ *  Schematic (RevF): https://github.com/lwalkera/printrboard/raw/revF/Printrboard.sch
+ *  Schematic (RevF2): https://raw.githubusercontent.com/lwalkera/printrboard/revF2/Printrboard.sch
+ *  Schematic (RevF3): https://raw.githubusercontent.com/lwalkera/printrboard/revF3/Printrboard.sch
+ *  Schematic (RevF4): https://raw.githubusercontent.com/lwalkera/printrboard/revF4/Printrboard.sch
+ *  Schematic (RevF5): https://raw.githubusercontent.com/lwalkera/printrboard/revF5/Printrboard.sch
+ *  Schematic (RevF6): https://raw.githubusercontent.com/lwalkera/printrboard/revF6/Printrboard.sch
  */
 
 /**
@@ -63,9 +70,7 @@
  *   4. The programmer is no longer needed. Remove it.
  */
 
-#if NOT_TARGET(__AVR_AT90USB1286__)
-  #error "Oops! Select 'Teensy++ 2.0' or 'Printrboard' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #if !defined(__MARLIN_DEPS__) && !defined(USBCON)
   #error "USBCON should be defined by the platform for this board."
@@ -143,7 +148,7 @@
 #endif // NO_EXTRUDRBOARD
 
 // Enable control of stepper motor currents with the I2C based MCP4728 DAC used on Printrboard REVF
-#define HAS_MOTOR_CURRENT_DAC
+#define HAS_MOTOR_CURRENT_DAC 1
 
 // Set default drive strength percents if not already defined - X, Y, Z, E axis
 #ifndef DAC_MOTOR_CURRENT_DEFAULT
@@ -192,8 +197,8 @@
 #endif
 #endif
 
-#ifndef FAN_PIN
-  #define FAN_PIN                             16  // C6 PWM3A
+#ifndef FAN0_PIN
+  #define FAN0_PIN                            16  // C6 PWM3A
 #endif
 
 //
@@ -203,7 +208,7 @@
 
 #if HAS_WIRED_LCD
   #define LCD_PINS_RS                          9  // E1       JP11-11
-  #define LCD_PINS_ENABLE                      8  // E0       JP11-10
+  #define LCD_PINS_EN                          8  // E0       JP11-10
   #define LCD_PINS_D4                          7  // D7       JP11-8
   #define LCD_PINS_D5                          6  // D6       JP11-7
   #define LCD_PINS_D6                          5  // D5       JP11-6
@@ -214,22 +219,23 @@
     #define BEEPER_PIN                         8  // E0       JP11-10
     #define DOGLCD_A0                         40  // F2       JP2-2
     #define DOGLCD_CS                         41  // F3       JP2-4
-    #define LCD_SCREEN_ROT_180
 
     #define BTN_EN1                            2  // D2 TX1   JP2-5
     #define BTN_EN2                            3  // D3 RX1   JP2-7
     #define BTN_ENC                           45  // F7 TDI   JP2-12
 
-    #define SDSS                               3  // F5 TMS   JP2-8
+    #define SD_SS_PIN                          3  // F5 TMS   JP2-8
 
     #define STAT_LED_RED_PIN                  12  // C2       JP11-14
     #define STAT_LED_BLUE_PIN                 10  // C0       JP11-12
+
+    #define LCD_SCREEN_ROTATE                180  // 0, 90, 180, 270
 
   #elif ENABLED(MINIPANEL)
 
     #if DISABLED(USE_INTERNAL_SD)
       //      PIN       FASTIO PIN#  ATUSB90 PIN# Teensy2.0++ PIN#  Printrboard RevF Conn.   MKSLCD12864 PIN#
-      #define SDSS                            11  //      36               C1                EXP2-13             EXP2-07
+      #define SD_SS_PIN                       11  //      36               C1                EXP2-13             EXP2-07
       #define SD_DETECT_PIN                    9  //      34               E1                EXP2-11             EXP2-04
     #endif
 
@@ -247,9 +253,9 @@
     //#define MISO                            23  //         13               B3                ICSP-06             EXP2-05
 
     // Alter timing for graphical display
-    #define BOARD_ST7920_DELAY_1 DELAY_NS(313)
-    #define BOARD_ST7920_DELAY_2 DELAY_NS(313)
-    #define BOARD_ST7920_DELAY_3 DELAY_NS(313)
+    #define BOARD_ST7920_DELAY_1           313
+    #define BOARD_ST7920_DELAY_2           313
+    #define BOARD_ST7920_DELAY_3           313
 
   #else
 
@@ -266,7 +272,7 @@
 //
 //      PIN       FASTIO PIN#  ATUSB90 PIN# Teensy2.0++ PIN#  Printrboard RevF Conn.
 #ifndef SDSS
-  #define SDSS                                20  //       10               B0
+  #define SD_SS_PIN                           20  //       10               B0
 #endif
 
 /**

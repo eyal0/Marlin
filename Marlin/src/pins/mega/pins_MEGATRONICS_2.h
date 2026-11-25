@@ -23,11 +23,11 @@
 
 /**
  * MegaTronics v2.0 pin assignments
+ * Schematic: https://reprap.org/wiki/File:Megatronicsv2PDF.zip
+ * ATmega2560
  */
 
-#if NOT_TARGET(__AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Megatronics v2.0"
 //
@@ -77,19 +77,17 @@
 //
 // Temperature Sensors
 //
-#if TEMP_SENSOR_0 == -1
+#if TEMP_SENSOR_0_IS_AD595
   #define TEMP_0_PIN                           4  // Analog Input
 #else
   #define TEMP_0_PIN                          13  // Analog Input
 #endif
-
-#if TEMP_SENSOR_1 == -1
+#if TEMP_SENSOR_1_IS_AD595
   #define TEMP_1_PIN                           8  // Analog Input
 #else
   #define TEMP_1_PIN                          15  // Analog Input
 #endif
-
-#if TEMP_SENSOR_BED == -1
+#if TEMP_SENSOR_BED_IS_AD595
   #define TEMP_BED_PIN                         8  // Analog Input
 #else
   #define TEMP_BED_PIN                        14  // Analog Input
@@ -102,15 +100,15 @@
 #define HEATER_1_PIN                           8
 #define HEATER_BED_PIN                        10
 
-#ifndef FAN_PIN
-  #define FAN_PIN                              7
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             7
 #endif
 #define FAN1_PIN                               6
 
 //
 // Misc. Functions
 //
-#define SDSS                                  53
+#define SD_SS_PIN                             53
 #define LED_PIN                               13
 #define PS_ON_PIN                             12
 
@@ -121,9 +119,11 @@
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#define SPINDLE_LASER_PWM_PIN                  3  // Hardware PWM
-#define SPINDLE_LASER_ENA_PIN                 16  // Pullup!
-#define SPINDLE_DIR_PIN                       11
+#if HAS_CUTTER
+  #define SPINDLE_LASER_PWM_PIN                3  // Hardware PWM
+  #define SPINDLE_LASER_ENA_PIN               16  // Pullup!
+  #define SPINDLE_DIR_PIN                     11
+#endif
 
 //
 // LCD / Controller
@@ -133,7 +133,7 @@
 #if HAS_WIRED_LCD
 
   #define LCD_PINS_RS                         14
-  #define LCD_PINS_ENABLE                     15
+  #define LCD_PINS_EN                         15
   #define LCD_PINS_D4                         30
   #define LCD_PINS_D5                         31
   #define LCD_PINS_D6                         32
@@ -146,10 +146,10 @@
     #define BTN_ENC                           43
   #else
     // Buttons attached to shift register of reprapworld keypad v1.1
-    #define SHIFT_CLK                         63
-    #define SHIFT_LD                          42
-    #define SHIFT_OUT                         17
-    #define SHIFT_EN                          17
+    #define SHIFT_CLK_PIN                     63
+    #define SHIFT_LD_PIN                      42
+    #define SHIFT_OUT_PIN                     17
+    #define SHIFT_EN_PIN                      17
   #endif
 
 #endif // HAS_WIRED_LCD

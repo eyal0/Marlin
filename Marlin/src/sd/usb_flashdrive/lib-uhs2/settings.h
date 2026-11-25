@@ -22,14 +22,13 @@
  * Web      :  https://www.circuitsathome.com
  * e-mail   :  support@circuitsathome.com
  */
-
 #pragma once
 
 #include "../../../inc/MarlinConfig.h"
 
 #include "macros.h"
 
-#if ENABLED(USB_FLASH_DRIVE_SUPPORT)
+#if HAS_USB_FLASH_DRIVE
   ////////////////////////////////////////////////////////////////////////////////
   /* Added by Bill Greiman to speed up mass storage initialization with USB
    * flash drives and simple USB hard drives.
@@ -65,12 +64,12 @@
  * multiple serial ports are available.
  * For example Serial3.
  */
-#if ENABLED(USB_FLASH_DRIVE_SUPPORT)
-  #define USB_HOST_SERIAL MYSERIAL0
-#endif
-
 #ifndef USB_HOST_SERIAL
-  #define USB_HOST_SERIAL Serial
+  #if HAS_USB_FLASH_DRIVE
+    #define USB_HOST_SERIAL MYSERIAL1
+  #else
+    #define USB_HOST_SERIAL Serial
+  #endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

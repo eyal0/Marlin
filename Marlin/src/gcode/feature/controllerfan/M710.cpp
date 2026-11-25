@@ -27,18 +27,6 @@
 #include "../../gcode.h"
 #include "../../../feature/controllerfan.h"
 
-void M710_report(const bool forReplay) {
-  if (!forReplay) { SERIAL_ECHOLNPGM("; Controller Fan"); SERIAL_ECHO_START(); }
-  SERIAL_ECHOLNPAIR("  M710"
-    " S", int(controllerFan.settings.active_speed),
-    " I", int(controllerFan.settings.idle_speed),
-    " A", int(controllerFan.settings.auto_mode),
-    " D", controllerFan.settings.duration,
-    " ; (", (int(controllerFan.settings.active_speed) * 100) / 255, "%"
-    " ", (int(controllerFan.settings.idle_speed) * 100) / 255, "%)"
-  );
-}
-
 /**
  * M710: Set controller fan settings
  *
@@ -58,24 +46,36 @@ void M710_report(const bool forReplay) {
  *   M710 I127 A1 S255 D160 ; Set controller fan idle speed 50%, AutoMode On, Fan speed 100%, duration to 160 Secs
  */
 void GcodeSuite::M710() {
+  if (!parser.seen("ADIRS")) return M710_report();
 
-  const bool seenR = parser.seen('R');
-  if (seenR) controllerFan.reset();
+  if (parser.seen_test('R'))
+    controllerFan.reset();
 
-  const bool seenS = parser.seenval('S');
-  if (seenS) controllerFan.settings.active_speed = parser.value_byte();
+  if (parser.seenval('S'))
+    controllerFan.settings.active_speed = parser.value_byte();
 
-  const bool seenI = parser.seenval('I');
-  if (seenI) controllerFan.settings.idle_speed = parser.value_byte();
+  if (parser.seenval('I'))
+    controllerFan.settings.idle_speed = parser.value_byte();
 
-  const bool seenA = parser.seenval('A');
-  if (seenA) controllerFan.settings.auto_mode = parser.value_bool();
+  if (parser.seenval('A'))
+    controllerFan.settings.auto_mode = parser.value_bool();
 
-  const bool seenD = parser.seenval('D');
-  if (seenD) controllerFan.settings.duration = parser.value_ushort();
+  if (parser.seenval('D'))
+    controllerFan.settings.duration = parser.value_ushort();
+}
 
-  if (!(seenR || seenS || seenI || seenA || seenD))
-    M710_report(false);
+void GcodeSuite::M710_report(const bool forReplay/*=true*/) {
+  TERN_(MARLIN_SMALL_BUILD, return);
+
+  report_heading_etc(forReplay, F(STR_CONTROLLER_FAN));
+  SERIAL_ECHOLNPGM("  M710"
+    " S", int(controllerFan.settings.active_speed),
+    " I", int(controllerFan.settings.idle_speed),
+    " A", int(controllerFan.settings.auto_mode),
+    " D", controllerFan.settings.duration,
+    " ; (", (int(controllerFan.settings.active_speed) * 100) / 255, "%"
+    " ", (int(controllerFan.settings.idle_speed) * 100) / 255, "%)"
+  );
 }
 
 #endif // CONTROLLER_FAN_EDITABLE

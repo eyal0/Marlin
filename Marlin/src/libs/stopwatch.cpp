@@ -29,12 +29,18 @@
 #endif
 
 Stopwatch::State Stopwatch::state;
-millis_t Stopwatch::accumulator;
-millis_t Stopwatch::startTimestamp;
-millis_t Stopwatch::stopTimestamp;
+uint32_t Stopwatch::accumulator;
+uint32_t Stopwatch::startTimestamp;
+uint32_t Stopwatch::stopTimestamp;
+
+#if ANY(REMAINING_TIME_PRIME, REMAINING_TIME_AUTOPRIME)
+  uint32_t Stopwatch::lap_start_time;   // Reckon from this start time
+  float    Stopwatch::lap_start_sdpos,  // Reckon from this start file position
+           Stopwatch::lap_total_data;   // Total size from start_sdpos to end of file
+#endif
 
 bool Stopwatch::stop() {
-  Stopwatch::debug(PSTR("stop"));
+  debug(F("stop"));
 
   if (isRunning() || isPaused()) {
     TERN_(EXTENSIBLE_UI, ExtUI::onPrintTimerStopped());
@@ -46,7 +52,7 @@ bool Stopwatch::stop() {
 }
 
 bool Stopwatch::pause() {
-  Stopwatch::debug(PSTR("pause"));
+  debug(F("pause"));
 
   if (isRunning()) {
     TERN_(EXTENSIBLE_UI, ExtUI::onPrintTimerPaused());
@@ -58,7 +64,7 @@ bool Stopwatch::pause() {
 }
 
 bool Stopwatch::start() {
-  Stopwatch::debug(PSTR("start"));
+  debug(F("start"));
 
   TERN_(EXTENSIBLE_UI, ExtUI::onPrintTimerStarted());
 
@@ -73,15 +79,15 @@ bool Stopwatch::start() {
   else return false;
 }
 
-void Stopwatch::resume(const millis_t with_time) {
-  Stopwatch::debug(PSTR("resume"));
+void Stopwatch::resume(const uint32_t with_time) {
+  debug(F("resume"));
 
   reset();
   if ((accumulator = with_time)) state = RUNNING;
 }
 
 void Stopwatch::reset() {
-  Stopwatch::debug(PSTR("reset"));
+  debug(F("reset"));
 
   state = STOPPED;
   startTimestamp = 0;
@@ -89,18 +95,14 @@ void Stopwatch::reset() {
   accumulator = 0;
 }
 
-millis_t Stopwatch::duration() {
+uint32_t Stopwatch::duration() {
   return accumulator + MS_TO_SEC((isRunning() ? millis() : stopTimestamp) - startTimestamp);
 }
 
 #if ENABLED(DEBUG_STOPWATCH)
 
-  void Stopwatch::debug(const char func[]) {
-    if (DEBUGGING(INFO)) {
-      SERIAL_ECHOPGM("Stopwatch::");
-      serialprintPGM(func);
-      SERIAL_ECHOLNPGM("()");
-    }
+  void Stopwatch::debug(FSTR_P const func) {
+    if (DEBUGGING(INFO)) SERIAL_ECHOLNPGM("Stopwatch::", func, "()");
   }
 
 #endif

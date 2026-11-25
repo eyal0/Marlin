@@ -22,25 +22,30 @@
 #pragma once
 
 /**
- * MKS Robin nano (STM32F130VET6) board pin assignments
+ * MKS Robin nano (STM32F103VET6) board pin assignments
  */
 
 #if NOT_TARGET(__STM32F1__, STM32F1)
   #error "Oops! Select an STM32F1 board in 'Tools > Board.'"
 #elif HOTENDS > 2 || E_STEPPERS > 2
-  #error "MKS Robin nano supports up to 2 hotends / E-steppers. Comment out this line to continue."
+  #error "MKS Robin nano supports up to 2 hotends / E steppers."
 #elif HAS_FSMC_TFT
   #error "MKS Robin nano v2 doesn't support FSMC-based TFT displays."
 #endif
 
 #define BOARD_INFO_NAME "MKS Robin nano V2.0"
 
-#define BOARD_NO_NATIVE_USB
+#ifndef USB_MOD
+  #define BOARD_NO_NATIVE_USB
+#endif
+#define USES_DIAG_PINS
+
+// Avoid conflict with TIMER_SERVO when using the STM32 HAL
+#define TEMP_TIMER  5
 
 //
 // Release PB4 (Y_ENABLE_PIN) from JTAG NRST role
 //
-
 #define DISABLE_DEBUG
 
 //
@@ -49,15 +54,20 @@
 //#define FLASH_EEPROM_EMULATION
 //#define SDCARD_EEPROM_EMULATION
 
-#if EITHER(NO_EEPROM_SELECTED, I2C_EEPROM)
+#if SHALL_USE_EEPROM(I2C_EEPROM)
   #define I2C_EEPROM                              // EEPROM on I2C-0
-  #define MARLIN_EEPROM_SIZE              0x1000  // 4KB
+  #define MARLIN_EEPROM_SIZE             0x1000U  // 4K
 #endif
 
 //
-// Note: MKS Robin board is using SPI2 interface.
+// SPI
 //
-#define SPI_DEVICE                             2
+#define SPI_DEVICE                             2  // Maple
+
+//
+// Servos
+//
+#define SERVO0_PIN                          PA8   // Enable BLTOUCH
 
 //
 // Limit Switches
@@ -72,6 +82,13 @@
 #define Y_STOP_PIN                          PA12
 #define Z_MIN_PIN                           PA11
 #define Z_MAX_PIN                           PC4
+
+//
+// Probe enable
+//
+#if ENABLED(PROBE_ENABLE_DISABLE) && !defined(PROBE_ENABLE_PIN)
+  #define PROBE_ENABLE_PIN            SERVO0_PIN
+#endif
 
 //
 // Steppers
@@ -112,18 +129,16 @@
 #endif
 
 //
-// Software SPI pins for TMC2130 stepper drivers
+// SPI pins for TMC2130 stepper drivers
 //
-#if ENABLED(TMC_USE_SW_SPI)
-  #ifndef TMC_SW_MOSI
-    #define TMC_SW_MOSI                     PD14
-  #endif
-  #ifndef TMC_SW_MISO
-    #define TMC_SW_MISO                     PD1
-  #endif
-  #ifndef TMC_SW_SCK
-    #define TMC_SW_SCK                      PD0
-  #endif
+#ifndef TMC_SPI_MOSI
+  #define TMC_SPI_MOSI                      PD14
+#endif
+#ifndef TMC_SPI_MISO
+  #define TMC_SPI_MISO                      PD1
+#endif
+#ifndef TMC_SPI_SCK
+  #define TMC_SPI_SCK                       PD0
 #endif
 
 #if HAS_TMC_UART
@@ -139,28 +154,18 @@
   //#define E0_HARDWARE_SERIAL MSerial1
   //#define E1_HARDWARE_SERIAL MSerial1
 
-  //
-  // Software serial
-  //
-
   #define X_SERIAL_TX_PIN                   PD5
-  #define X_SERIAL_RX_PIN                   PD5
-
   #define Y_SERIAL_TX_PIN                   PD7
-  #define Y_SERIAL_RX_PIN                   PD7
-
   #define Z_SERIAL_TX_PIN                   PD4
-  #define Z_SERIAL_RX_PIN                   PD4
-
   #define E0_SERIAL_TX_PIN                  PD9
-  #define E0_SERIAL_RX_PIN                  PD9
-
   #define E1_SERIAL_TX_PIN                  PD8
-  #define E1_SERIAL_RX_PIN                  PD8
 
   // Reduce baud rate to improve software serial reliability
-  #define TMC_BAUD_RATE                    19200
-#endif // TMC2208 || TMC2209
+  #ifndef TMC_BAUD_RATE
+    #define TMC_BAUD_RATE                  19200
+  #endif
+
+#endif // HAS_TMC_UART
 
 //
 // Temperature Sensors
@@ -176,46 +181,68 @@
 #define HEATER_1_PIN                        PB0   // HEATER2
 #define HEATER_BED_PIN                      PA0   // HOT BED
 
-#define FAN_PIN                             PB1   // FAN
+#define FAN0_PIN                            PB1   // FAN
 
 //
 // Thermocouples
 //
-//#define MAX6675_SS_PIN                    PE5   // TC1 - CS1
-//#define MAX6675_SS_PIN                    PE6   // TC2 - CS2
+//#define TEMP_0_CS_PIN                     PE5   // TC1 - CS1
+//#define TEMP_0_CS_PIN                     PE6   // TC2 - CS2
+
+//
+// Power Supply Control
+//
+#if ENABLED(MKS_PWC)
+  #if HAS_TFT_LVGL_UI
+    #if ENABLED(PSU_CONTROL)
+      #error "PSU_CONTROL is incompatible with MKS_PWC plus TFT_LVGL_UI."
+    #endif
+    #undef MKS_PWC
+    #define SUICIDE_PIN                     PB2
+    #define SUICIDE_PIN_STATE               LOW
+  #else
+    #define PS_ON_PIN                       PB2   // PW_OFF
+  #endif
+  #define KILL_PIN                          PA2
+  #define KILL_PIN_STATE                    HIGH
+#endif
 
 //
 // Misc. Functions
 //
+#ifndef FIL_RUNOUT_PIN
+  #define FIL_RUNOUT_PIN                    PA4   // MT_DET_1
+#endif
+#ifndef FIL_RUNOUT2_PIN
+  #define FIL_RUNOUT2_PIN                   PE6   // MT_DET_2
+#endif
+#ifndef FIL_RUNOUT_STATE
+  #define FIL_RUNOUT_STATE                LOW
+#endif
+
+//
+// MKS WiFi Module
+//
+#if ENABLED(MKS_WIFI_MODULE)
+  #define WIFI_SERIAL_PORT                     1  // USART1
+  #define WIFI_IO0_PIN                      PC13
+  #define WIFI_IO1_PIN                      PC7
+  #define WIFI_RESET_PIN                    PE9
+#endif
+
 #if HAS_TFT_LVGL_UI
-  //#define MKSPWC
-  #ifdef MKSPWC
-    #define SUICIDE_PIN                     PB2   // Enable MKSPWC SUICIDE PIN
-    #define SUICIDE_PIN_INVERTING          false  // Enable MKSPWC PIN STATE
-    #define KILL_PIN                        PA2   // Enable MKSPWC DET PIN
-    #define KILL_PIN_STATE                  true  // Enable MKSPWC PIN STATE
-  #endif
-
-  #define MT_DET_1_PIN                      PA4   // LVGL UI FILAMENT RUNOUT1 PIN
-  #define MT_DET_2_PIN                      PE6   // LVGL UI FILAMENT RUNOUT2 PIN
-  #define MT_DET_PIN_INVERTING             false  // LVGL UI filament RUNOUT PIN STATE
-
-  #define WIFI_IO0_PIN                      PC13  // MKS ESP WIFI IO0 PIN
-  #define WIFI_IO1_PIN                      PC7   // MKS ESP WIFI IO1 PIN
-  #define WIFI_RESET_PIN                    PE9   // MKS ESP WIFI RESET PIN
-
+  //
+  // MKS Testing for code in lcd/extui/mks_ui
+  //
   #if ENABLED(MKS_TEST)
     #define MKS_TEST_POWER_LOSS_PIN         PA2   // PW_DET
     #define MKS_TEST_PS_ON_PIN              PB2   // PW_OFF
   #endif
+
 #else
   //#define POWER_LOSS_PIN                  PA2   // PW_DET
   //#define PS_ON_PIN                       PB2   // PW_OFF
-  #define FIL_RUNOUT_PIN                    PA4
-  #define FIL_RUNOUT2_PIN                   PE6
 #endif
-
-#define SERVO0_PIN                          PA8   // Enable BLTOUCH
 
 //#define LED_PIN                           PB2
 
@@ -226,10 +253,49 @@
   #define SDCARD_CONNECTION              ONBOARD
 #endif
 
-#define SDIO_SUPPORT
-#define SDIO_CLOCK                       4500000  // 4.5 MHz
-#define SD_DETECT_PIN                       PD12
-#define ONBOARD_SD_CS_PIN                   PC11
+#if SD_CONNECTION_IS(ONBOARD)
+  #define ONBOARD_SDIO
+  #define SDIO_CLOCK                     4500000  // 4.5 MHz
+  #define SD_DETECT_PIN                     PD12
+  #define ONBOARD_SD_CS_PIN                 PC11
+#elif SD_CONNECTION_IS(LCD)
+  #define ENABLE_SPI1
+  #define SD_SS_PIN                  EXP2_04_PIN
+  #define SD_SCK_PIN                 EXP2_02_PIN
+  #define SD_MISO_PIN                EXP2_01_PIN
+  #define SD_MOSI_PIN                EXP2_06_PIN
+  #define SD_DETECT_PIN              EXP2_07_PIN
+#endif
+
+/**
+ *        ------                  ------
+ *  PC5  | 1  2 | PE13       PA6 | 1  2 | PA5
+ *  PD13 | 3  4 | PC6        PE8 | 3  4 | PE10
+ *  PE14 | 5  6   PE15      PE11 | 5  6   PA7
+ *  PD11 | 7  8 | PD10      PE12 | 7  8 | RESET
+ *   GND | 9 10 | 5V         GND | 9 10 | 3.3V
+ *        ------                  ------
+ *         EXP1                    EXP2
+ */
+#define EXP1_01_PIN                         PC5
+#define EXP1_02_PIN                         PE13
+#define EXP1_03_PIN                         PD13
+#define EXP1_04_PIN                         PC6
+#define EXP1_05_PIN                         PE14
+#define EXP1_06_PIN                         PE15
+#define EXP1_07_PIN                         PD11
+#define EXP1_08_PIN                         PD10
+
+#define EXP2_01_PIN                         PA6
+#define EXP2_02_PIN                         PA5
+#define EXP2_03_PIN                         PE8
+#define EXP2_04_PIN                         PE10
+#define EXP2_05_PIN                         PE11
+#define EXP2_06_PIN                         PA7
+#define EXP2_07_PIN                         PE12
+#define EXP2_08_PIN                         -1    // RESET
+
+#define EXP_REVERSE_KEYED
 
 //
 // LCD / Controller
@@ -237,57 +303,60 @@
 
 /**
  * Note: MKS Robin TFT screens use various TFT controllers.
- * If the screen stays white, disable 'LCD_RESET_PIN'
- * to let the bootloader init the screen.
+ * If the screen stays white, disable 'LCD_RESET_PIN' to let the bootloader init the screen.
  */
+
+#if ENABLED(TFT_CLASSIC_UI)
+  // Emulated DOGM SPI
+  #define LCD_PINS_EN                EXP1_03_PIN
+  #define LCD_PINS_RS                EXP1_04_PIN
+  #define BTN_ENC                    EXP1_02_PIN
+  #define BTN_EN1                    EXP2_03_PIN
+  #define BTN_EN2                    EXP2_05_PIN
+#elif ENABLED(TFT_COLOR_UI)
+  #define TFT_BUFFER_WORDS                 14400
+#endif
 
 #if HAS_SPI_TFT
 
   // Shared SPI TFT
 
-  #define LCD_BACKLIGHT_PIN                 PD13
+  #define LCD_BACKLIGHT_PIN          EXP1_03_PIN
 
-  #define TOUCH_CS_PIN                      PE14  // SPI1_NSS
-  #define TOUCH_SCK_PIN                     PA5   // SPI1_SCK
-  #define TOUCH_MISO_PIN                    PA6   // SPI1_MISO
-  #define TOUCH_MOSI_PIN                    PA7   // SPI1_MOSI
+  #define TOUCH_CS_PIN               EXP1_05_PIN  // SPI1_NSS
+  #define TOUCH_SCK_PIN              EXP2_02_PIN  // SPI1_SCK
+  #define TOUCH_MISO_PIN             EXP2_01_PIN  // SPI1_MISO
+  #define TOUCH_MOSI_PIN             EXP2_06_PIN  // SPI1_MOSI
 
-  #define BTN_EN1                           PE8
-  #define BTN_EN2                           PE11
-  #define BTN_ENC                           PE13
+  #define BTN_EN1                    EXP2_03_PIN
+  #define BTN_EN2                    EXP2_05_PIN
+  #define BTN_ENC                    EXP1_02_PIN
 
-  #define TFT_CS_PIN                        PD11
-  #define TFT_SCK_PIN                       PA5
-  #define TFT_MISO_PIN                      PA6
-  #define TFT_MOSI_PIN                      PA7
-  #define TFT_DC_PIN                        PD10
-  #define TFT_RST_PIN                       PC6
+  #define TFT_CS_PIN                 EXP1_07_PIN
+  #define TFT_SCK_PIN                EXP2_02_PIN
+  #define TFT_MISO_PIN               EXP2_01_PIN
+  #define TFT_MOSI_PIN               EXP2_06_PIN
+  #define TFT_DC_PIN                 EXP1_08_PIN
   #define TFT_A0_PIN                  TFT_DC_PIN
 
-  #define TFT_RESET_PIN                     PC6
-  #define TFT_BACKLIGHT_PIN                 PD13
+  #define TFT_RESET_PIN              EXP1_04_PIN
+  #define TFT_BACKLIGHT_PIN    LCD_BACKLIGHT_PIN
 
   #define TOUCH_BUTTONS_HW_SPI
   #define TOUCH_BUTTONS_HW_SPI_DEVICE          1
 
   #define LCD_USE_DMA_SPI
 
-#endif
+#elif HAS_WIRED_LCD
 
-#if ENABLED(TFT_CLASSIC_UI)
-  // Emulated DOGM SPI
-  #define LCD_PINS_ENABLE                   PD13
-  #define LCD_PINS_RS                       PC6
-  #define BTN_ENC                           PE13
-  #define BTN_EN1                           PE8
-  #define BTN_EN2                           PE11
-#elif ENABLED(TFT_COLOR_UI)
-  #define TFT_BUFFER_SIZE                  14400
-#endif
+  #define BEEPER_PIN                 EXP1_01_PIN
 
-#if HAS_WIRED_LCD && !HAS_SPI_TFT
+  #define BTN_ENC                    EXP1_02_PIN
+  #define BTN_EN1                    EXP2_03_PIN
+  #define BTN_EN2                    EXP2_05_PIN
 
-  // NON TFT Displays
+  #define LCD_PINS_EN                EXP1_03_PIN
+  #define LCD_PINS_RS                EXP1_04_PIN
 
   #if ENABLED(MKS_MINI_12864)
 
@@ -296,31 +365,45 @@
 
     #define LCD_BACKLIGHT_PIN               -1
     #define LCD_RESET_PIN                   -1
-    #define DOGLCD_A0                       PD11
-    #define DOGLCD_CS                       PE15
-    #define DOGLCD_SCK                      PA5
-    #define DOGLCD_MOSI                     PA7
+    #define DOGLCD_A0                EXP1_07_PIN
+    #define DOGLCD_CS                EXP1_06_PIN
+    #define DOGLCD_SCK               EXP2_02_PIN
+    #define DOGLCD_MOSI              EXP2_06_PIN
 
   #elif IS_TFTGLCD_PANEL
 
     #if ENABLED(TFTGLCD_PANEL_SPI)
-      #define PIN_SPI_SCK                   PA5
-      #define PIN_TFT_MISO                  PA6
-      #define PIN_TFT_MOSI                  PA7
-      #define TFTGLCD_CS                    PE8
+      #define PIN_SPI_SCK            EXP2_02_PIN
+      #define PIN_TFT_MISO           EXP2_01_PIN
+      #define PIN_TFT_MOSI           EXP2_06_PIN
+      #define TFTGLCD_CS             EXP2_03_PIN
     #endif
 
     #ifndef BEEPER_PIN
       #define BEEPER_PIN                    -1
     #endif
 
-  #else                                           // !MKS_MINI_12864
+  #elif ENABLED(FYSETC_MINI_12864_2_1)
+    #define LCD_PINS_DC              EXP1_04_PIN
+    #define DOGLCD_CS                EXP1_03_PIN
+    #define DOGLCD_A0                  DOGLCD_A0
+    #define LCD_BACKLIGHT_PIN               -1
+    #define LCD_RESET_PIN            EXP1_05_PIN
+    #define NEOPIXEL_PIN             EXP1_06_PIN
+    #define DOGLCD_MOSI              EXP2_06_PIN
+    #define DOGLCD_SCK               EXP2_02_PIN
+    #if SD_CONNECTION_IS(ONBOARD)
+      #define FORCE_SOFT_SPI
+    #endif
+    //#define LCD_SCREEN_ROTATE              180  // 0, 90, 180, 270
 
-    #define LCD_PINS_D4                     PE14
+  #else // !FYSETC_MINI_12864_2_1
+
+    #define LCD_PINS_D4              EXP1_05_PIN
     #if IS_ULTIPANEL
-      #define LCD_PINS_D5                   PE15
-      #define LCD_PINS_D6                   PD11
-      #define LCD_PINS_D7                   PD10
+      #define LCD_PINS_D5            EXP1_06_PIN
+      #define LCD_PINS_D6            EXP1_07_PIN
+      #define LCD_PINS_D7            EXP1_08_PIN
 
       #if ENABLED(REPRAP_DISCOUNT_FULL_GRAPHIC_SMART_CONTROLLER)
         #define BTN_ENC_EN           LCD_PINS_D7  // Detect the presence of the encoder
@@ -328,31 +411,27 @@
 
     #endif
 
-    #ifndef BOARD_ST7920_DELAY_1
-      #define BOARD_ST7920_DELAY_1 DELAY_NS(125)
-    #endif
-    #ifndef BOARD_ST7920_DELAY_2
-      #define BOARD_ST7920_DELAY_2 DELAY_NS(125)
-    #endif
-    #ifndef BOARD_ST7920_DELAY_3
-      #define BOARD_ST7920_DELAY_3 DELAY_NS(125)
+    #if IS_U8GLIB_ST7920
+      #define BOARD_ST7920_DELAY_1           125
+      #define BOARD_ST7920_DELAY_2           125
+      #define BOARD_ST7920_DELAY_3           125
     #endif
 
-  #endif // !MKS_MINI_12864
+  #endif // !FYSETC_MINI_12864_2_1
 
 #endif // HAS_WIRED_LCD && !HAS_SPI_TFT
 
-#define HAS_SPI_FLASH                          1
-#if HAS_SPI_FLASH
+#define SPI_FLASH
+#if ENABLED(SPI_FLASH)
   #define SPI_FLASH_SIZE               0x1000000  // 16MB
-  #define W25QXX_CS_PIN                     PB12
-  #define W25QXX_MOSI_PIN                   PB15
-  #define W25QXX_MISO_PIN                   PB14
-  #define W25QXX_SCK_PIN                    PB13
+  #define SPI_FLASH_CS_PIN                  PB12
+  #define SPI_FLASH_SCK_PIN                 PB13
+  #define SPI_FLASH_MISO_PIN                PB14
+  #define SPI_FLASH_MOSI_PIN                PB15
 #endif
 
 #ifndef BEEPER_PIN
-  #define BEEPER_PIN                        PC5
+  #define BEEPER_PIN                 EXP1_01_PIN
 #endif
 
 #if ENABLED(SPEAKER) && BEEPER_PIN == PC5

@@ -22,12 +22,11 @@
 #pragma once
 
 /**
- * Azteeg X5 MINI pin assignments
+ * Azteeg X5 MINI WIFI pin assignments
+ * Schematic: http://files.panucatt.com/datasheets/x5mini_wifi_wiring.pdf
  */
 
-#if NOT_TARGET(MCU_LPC1769)
-  #error "Oops! Make sure you have the LPC1769 environment selected in your IDE."
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Azteeg X5 MINI WIFI"
 

@@ -26,7 +26,7 @@
 
 #include "../../inc/MarlinConfigPre.h"
 
-#if BOTH(HAS_LCD_MENU, CANCEL_OBJECTS)
+#if ALL(HAS_MARLINUI_MENU, CANCEL_OBJECTS)
 
 #include "menu_item.h"
 #include "menu_addon.h"
@@ -47,19 +47,19 @@ static void lcd_cancel_object_confirm() {
       ui.completion_feedback();
       ui.goto_previous_screen();
     },
-    ui.goto_previous_screen,
-    GET_TEXT(MSG_CANCEL_OBJECT), item_num, PSTR("?")
+    nullptr,
+    GET_TEXT_F(MSG_CANCEL_OBJECT), item_num, F("?")
   );
 }
 
 void menu_cancelobject() {
-  const int8_t ao = cancelable.active_object;
+  const int8_t ao = cancelable.state.active_object;
 
   START_MENU();
-  BACK_ITEM(MSG_MAIN);
+  BACK_ITEM(MSG_MAIN_MENU);
 
   // Draw cancelable items in a loop
-  for (int8_t i = -1; i < cancelable.object_count; i++) {
+  for (int8_t i = -1; i < cancelable.state.object_count; i++) {
     if (i == ao) continue;                                          // Active is drawn on -1 index
     const int8_t j = i < 0 ? ao : i;                                // Active or index item
     if (!cancelable.is_canceled(j)) {                               // Not canceled already?
@@ -71,4 +71,4 @@ void menu_cancelobject() {
   END_MENU();
 }
 
-#endif // HAS_LCD_MENU && CANCEL_OBJECTS
+#endif // HAS_MARLINUI_MENU && CANCEL_OBJECTS

@@ -26,9 +26,7 @@
  * https://reprap.org/wiki/Alligator_Board
  */
 
-#if NOT_TARGET(__SAM3X8E__)
-  #error "Oops! Select 'Arduino Due' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME    "Alligator Board R2"
 
@@ -87,7 +85,14 @@
 #define Z_MS1_PIN                             44  // PC19
 #define E0_MS1_PIN                            45  // PC18
 
-//#define MOTOR_FAULT_PIN                     22  // PB26 , motor X-Y-Z-E0 motor FAULT
+#ifndef MICROSTEP16
+  #define MICROSTEP16 LOW,LOW,LOW
+#endif
+#ifndef MICROSTEP32
+  #define MICROSTEP32 HIGH,HIGH,LOW
+#endif
+
+//#define MOTOR_FAULT_PIN                     22  // PB26, motor X-Y-Z-E0 motor FAULT
 
 //
 // Temperature Sensors
@@ -108,15 +113,15 @@
 #define HEATER_3_PIN                          97  // PC20 on piggy
 #define HEATER_BED_PIN                        69  // PA0
 
-#ifndef FAN_PIN
-  #define FAN_PIN                             92  // PA5
+#ifndef FAN0_PIN
+  #define FAN0_PIN                            92  // PA5
 #endif
 #define FAN1_PIN                              31  // PA7
 
 //
 // Misc. Functions
 //
-#define SDSS                                  77  // PA28
+#define SD_SS_PIN                             77  // PA28
 #define SD_DETECT_PIN                         87  // PA29
 #define LED_RED_PIN                           40  // PC8
 #define LED_GREEN_PIN                         41  // PC9
@@ -125,30 +130,30 @@
 
 #define SPI_CHAN_DAC                           1
 
-#define DAC0_SYNC                             53  // PB14
-#define DAC1_SYNC                              6  // PC24
+#define DAC0_SYNC_PIN                         53  // PB14
+#define DAC1_SYNC_PIN                          6  // PC24
 
 // 64K SPI EEPROM
 #define SPI_EEPROM
 #define SPI_CHAN_EEPROM1                       2
-#define SPI_EEPROM1_CS                        25  // PD0
+#define SPI_EEPROM1_CS_PIN                    25  // PD0
 
 // 2K SPI EEPROM
-#define SPI_EEPROM2_CS                        26  // PD1
+#define SPI_EEPROM2_CS_PIN                    26  // PD1
 
 // FLASH SPI
 // 32Mb
-#define SPI_FLASH_CS                          23  // PA14
+#define SPI_FLASH_CS_PIN                      23  // PA14
 
 //
 // LCD / Controller
 //
+
 #if IS_RRD_FG_SC
   #define LCD_PINS_RS                         18
-  #define LCD_PINS_ENABLE                     15
+  #define LCD_PINS_EN                         15
   #define LCD_PINS_D4                         19
   #define BEEPER_PIN                          64
-  #undef UI_VOLTAGE_LEVEL
   #define UI_VOLTAGE_LEVEL                     1
 #endif
 

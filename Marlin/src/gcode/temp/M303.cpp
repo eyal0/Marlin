@@ -25,6 +25,7 @@
 #if HAS_PID_HEATING
 
 #include "../gcode.h"
+#include "../queue.h" // for flush_tx
 #include "../../lcd/marlinui.h"
 #include "../../module/temperature.h"
 
@@ -40,46 +41,52 @@
  *  C<cycles>       Number of times to repeat the procedure. (Minimum: 3, Default: 5)
  *  U<bool>         Flag to apply the result to the current PID values
  *
- * With PID_DEBUG:
+ * With PID_DEBUG, PID_BED_DEBUG, or PID_CHAMBER_DEBUG:
  *  D               Toggle PID debugging and EXIT without further action.
  */
 
-#if ENABLED(PID_DEBUG)
-  bool pid_debug_flag = 0;
-#endif
-
 void GcodeSuite::M303() {
 
-  #if ENABLED(PID_DEBUG)
-    if (parser.seen('D')) {
-      pid_debug_flag = !pid_debug_flag;
-      SERIAL_ECHO_START();
-      SERIAL_ECHOPGM("PID Debug ");
-      serialprintln_onoff(pid_debug_flag);
+  #if HAS_PID_DEBUG
+    if (parser.seen_test('D')) {
+      FLIP(thermalManager.pid_debug_flag);
+      SERIAL_ECHO_MSG("PID Debug ", ON_OFF(thermalManager.pid_debug_flag));
       return;
     }
   #endif
 
-  #define SI TERN(PIDTEMPBED, H_BED, H_E0)
-  #define EI TERN(PIDTEMP, HOTENDS - 1, H_BED)
-  const heater_id_t e = (heater_id_t)parser.intval('E');
-  if (!WITHIN(e, SI, EI)) {
-    SERIAL_ECHOLNPGM(STR_PID_BAD_EXTRUDER_NUM);
-    TERN_(EXTENSIBLE_UI, ExtUI::onPidTuning(ExtUI::result_t::PID_BAD_EXTRUDER_NUM));
+  const heater_id_t hid = (heater_id_t)parser.intval('E');
+  celsius_t default_temp;
+  switch (hid) {
+    OPTCODE(PIDTEMP,        case 0 ... HOTENDS - 1: default_temp = TERN(HAS_PREHEAT, PREHEAT_1_TEMP_HOTEND, 180); break)
+    OPTCODE(PIDTEMPBED,     case H_BED:             default_temp = TERN(HAS_PREHEAT, PREHEAT_1_TEMP_BED, 60);     break)
+    OPTCODE(PIDTEMPCHAMBER, case H_CHAMBER:         default_temp = TERN(HAS_PREHEAT, PREHEAT_1_TEMP_CHAMBER, 35); break)
+    default:
+      SERIAL_ECHOPGM(STR_PID_AUTOTUNE);
+      SERIAL_ECHOLNPGM(STR_PID_BAD_HEATER_ID);
+      TERN_(EXTENSIBLE_UI, ExtUI::onPIDTuning(ExtUI::pidresult_t::PID_BAD_HEATER_ID));
+      return;
+  }
+
+  const int cycles = parser.intval('C', 5);
+  if (cycles < 3) {
+    SERIAL_ECHOLNPGM("?(C)ycles not plausible (>=3).");
     return;
   }
 
-  const int c = parser.intval('C', 5);
-  const bool u = parser.boolval('U');
-  const int16_t temp = parser.celsiusval('S', e < 0 ? PREHEAT_1_TEMP_BED : PREHEAT_1_TEMP_HOTEND);
+  const bool seenS = parser.seenval('S');
+  const celsius_t temp = seenS ? parser.value_celsius() : default_temp;
+  const bool uflag = parser.boolval('U');
 
-  #if DISABLED(BUSY_WHILE_HEATING)
-    KEEPALIVE_STATE(NOT_BUSY);
-  #endif
+  TERN_(EXTENSIBLE_UI, ExtUI::onStartM303(cycles, hid, temp));
 
-  LCD_MESSAGEPGM(MSG_PID_AUTOTUNE);
-  thermalManager.PID_autotune(temp, e, c, u);
+  IF_DISABLED(BUSY_WHILE_HEATING, KEEPALIVE_STATE(NOT_BUSY));
+
+  LCD_MESSAGE(MSG_PID_AUTOTUNE);
+  thermalManager.PID_autotune(temp, hid, cycles, uflag);
   ui.reset_status();
+
+  queue.flush_rx();
 }
 
 #endif // HAS_PID_HEATING

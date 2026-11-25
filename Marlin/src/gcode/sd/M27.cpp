@@ -22,29 +22,36 @@
 
 #include "../../inc/MarlinConfig.h"
 
-#if ENABLED(SDSUPPORT)
+#if HAS_MEDIA
 
 #include "../gcode.h"
 #include "../../sd/cardreader.h"
 
 /**
  * M27: Get SD Card status
- *      OR, with 'S<seconds>' set the SD status auto-report interval. (Requires AUTO_REPORT_SD_STATUS)
- *      OR, with 'C' get the current filename.
+ *
+ * Parameters:
+ *   None  Report the current SD read position
+ *   C     Report the filename and long filename of the current file
+ *
+ *   With AUTO_REPORT_SD_STATUS:
+ *     S<seconds>  Interval between auto-reports. S0 to disable
  */
 void GcodeSuite::M27() {
-  if (parser.seen('C')) {
+  if (parser.seen_test('C')) {
     SERIAL_ECHOPGM("Current file: ");
-    card.printFilename();
+    card.printSelectedFilename();
+    return;
   }
 
   #if ENABLED(AUTO_REPORT_SD_STATUS)
-    else if (parser.seenval('S'))
-      card.set_auto_report_interval(parser.value_byte());
+    if (parser.seenval('S')) {
+      card.auto_reporter.set_interval(parser.value_byte());
+      return;
+    }
   #endif
 
-  else
-    card.report_status();
+  card.report_status();
 }
 
-#endif // SDSUPPORT
+#endif // HAS_MEDIA

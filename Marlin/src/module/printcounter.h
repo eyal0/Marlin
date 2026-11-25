@@ -35,11 +35,13 @@ struct printStatistics {    // 16 bytes
   //const uint8_t magic;    // Magic header, it will always be 0x16
   uint16_t totalPrints;     // Number of prints
   uint16_t finishedPrints;  // Number of complete prints
-  uint32_t printTime;       // Accumulated printing time
-  uint32_t longestPrint;    // Longest successful print job
-  float    filamentUsed;    // Accumulated filament consumed in mm
+  uint32_t printTime;       // (s) Accumulated printing time
+  uint32_t longestPrint;    // (s) Longest successful print job
+  #if HAS_EXTRUDERS
+    float  filamentUsed;    // Accumulated filament consumed in mm
+  #endif
   #if SERVICE_INTERVAL_1 > 0
-    uint32_t nextService1;  // Service intervals (or placeholders)
+    uint32_t nextService1;  // (s) Service intervals (or placeholders)
   #endif
   #if SERVICE_INTERVAL_2 > 0
     uint32_t nextService2;
@@ -52,12 +54,7 @@ struct printStatistics {    // 16 bytes
 class PrintCounter: public Stopwatch {
   private:
     typedef Stopwatch super;
-
-    #if EITHER(USE_WIRED_EEPROM, CPU_32_BIT)
-      typedef uint32_t eeprom_address_t;
-    #else
-      typedef uint16_t eeprom_address_t;
-    #endif
+    typedef IF<ANY(USE_WIRED_EEPROM, CPU_32_BIT), uint32_t, uint16_t>::type eeprom_address_t;
 
     static printStatistics data;
 
@@ -71,26 +68,25 @@ class PrintCounter: public Stopwatch {
      * @brief Interval in seconds between counter updates
      * @details This const value defines what will be the time between each
      * accumulator update. This is different from the EEPROM save interval.
-     *
-     * @note The max value for this option is 60(s), otherwise integer
-     * overflow will happen.
      */
-    static constexpr uint16_t updateInterval = 10;
+    static constexpr millis_t updateInterval = SEC_TO_MS(10);
 
-    /**
-     * @brief Interval in seconds between EEPROM saves
-     * @details This const value defines what will be the time between each
-     * EEPROM save cycle, the development team recommends to set this value
-     * no lower than 3600 secs (1 hour).
-     */
-    static constexpr uint16_t saveInterval = 3600;
+    #if PRINTCOUNTER_SAVE_INTERVAL > 0
+      /**
+       * @brief Interval in seconds between EEPROM saves
+       * @details This const value defines what will be the time between each
+       * EEPROM save cycle, the development team recommends to set this value
+       * no lower than 3600 secs (1 hour).
+       */
+      static constexpr millis_t saveInterval = MIN_TO_MS(PRINTCOUNTER_SAVE_INTERVAL);
+    #endif
 
     /**
      * @brief Timestamp of the last call to deltaDuration()
      * @details Store the timestamp of the last deltaDuration(), this is
      * required due to the updateInterval cycle.
      */
-    static millis_t lastDuration;
+    static uint32_t lastDuration;
 
     /**
      * @brief Stats were loaded from EEPROM
@@ -106,14 +102,14 @@ class PrintCounter: public Stopwatch {
      * used internally for print statistics accounting is not intended to be a
      * user callable function.
      */
-    static millis_t deltaDuration();
+    static uint32_t deltaDuration();
 
   public:
 
     /**
      * @brief Initialize the print counter
      */
-    static inline void init() {
+    static void init() {
       super::init();
       loadStats();
     }
@@ -125,13 +121,15 @@ class PrintCounter: public Stopwatch {
      */
     FORCE_INLINE static bool isLoaded() { return loaded; }
 
-    /**
-     * @brief Increment the total filament used
-     * @details The total filament used counter will be incremented by "amount".
-     *
-     * @param amount The amount of filament used in mm
-     */
-    static void incFilamentUsed(float const &amount);
+    #if HAS_EXTRUDERS
+      /**
+       * @brief Increment the total filament used
+       * @details The total filament used counter will be incremented by "amount".
+       *
+       * @param amount The amount of filament used in mm
+       */
+      static void incFilamentUsed(float const &amount);
+    #endif
 
     /**
      * @brief Reset the Print Statistics
@@ -176,7 +174,10 @@ class PrintCounter: public Stopwatch {
      * The following functions are being overridden
      */
     static bool start();
-    static bool stop();
+    static bool _stop(const bool completed);
+    static bool stop()  { return _stop(true);  }
+    static bool abort() { return _stop(false); }
+
     static void reset();
 
     #if HAS_SERVICE_INTERVALS

@@ -23,6 +23,7 @@
 
 /**
  * Ultimaker pin assignments
+ * ATmega2560, ATmega1280
  */
 
 /**
@@ -33,13 +34,11 @@
  *    case light
  */
 
-#if NOT_TARGET(__AVR_ATmega1280__, __AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME         "Ultimaker"
 #define DEFAULT_MACHINE_NAME    BOARD_INFO_NAME
-#define DEFAULT_SOURCE_CODE_URL "https://github.com/Ultimaker/Marlin"
+#define DEFAULT_SOURCE_CODE_URL "github.com/Ultimaker/Marlin"
 
 //
 // Servos
@@ -100,14 +99,14 @@
 #define HEATER_1_PIN                           3
 #define HEATER_BED_PIN                         4
 
-#ifndef FAN_PIN
-  #define FAN_PIN                              7
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             7
 #endif
 
 //
 // Misc. Functions
 //
-#define SDSS                                  53
+#define SD_SS_PIN                             53
 #define LED_PIN                               13
 #define PS_ON_PIN                             12
 #define SUICIDE_PIN                           54  // PIN that has to be turned on right after start, to keep power flowing.
@@ -119,6 +118,7 @@
 //
 // LCD / Controller
 //
+
 #if HAS_WIRED_LCD
 
   #define BEEPER_PIN                          18
@@ -126,7 +126,7 @@
   #if IS_NEWPANEL
 
     #define LCD_PINS_RS                       20
-    #define LCD_PINS_ENABLE                   17
+    #define LCD_PINS_EN                       17
     #define LCD_PINS_D4                       16
     #define LCD_PINS_D5                       21
     #define LCD_PINS_D6                        5
@@ -139,16 +139,16 @@
 
     #define SD_DETECT_PIN                     38
 
-  #else                                           // !IS_NEWPANEL - Old style panel with shift register
+  #else // !IS_NEWPANEL - Old style panel with shift register
 
     // Buttons attached to a shift register
-    #define SHIFT_CLK                         38
-    #define SHIFT_LD                          42
-    #define SHIFT_OUT                         40
-    #define SHIFT_EN                          17
+    #define SHIFT_CLK_PIN                     38
+    #define SHIFT_LD_PIN                      42
+    #define SHIFT_OUT_PIN                     40
+    #define SHIFT_EN_PIN                      17
 
     #define LCD_PINS_RS                       16
-    #define LCD_PINS_ENABLE                    5
+    #define LCD_PINS_EN                        5
     #define LCD_PINS_D4                        6
     #define LCD_PINS_D5                       21
     #define LCD_PINS_D6                       20
@@ -163,6 +163,8 @@
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#define SPINDLE_LASER_PWM_PIN                  9  // Hardware PWM
-#define SPINDLE_LASER_ENA_PIN                 10  // Pullup!
-#define SPINDLE_DIR_PIN                       11  // use the EXP3 PWM header
+#if HAS_CUTTER
+  #define SPINDLE_LASER_PWM_PIN                9  // Hardware PWM
+  #define SPINDLE_LASER_ENA_PIN               10  // Pullup!
+  #define SPINDLE_DIR_PIN                     11  // use the EXP3 PWM header
+#endif

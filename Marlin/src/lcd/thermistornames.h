@@ -35,15 +35,17 @@
 #if THERMISTOR_ID == 1000
   #define THERMISTOR_NAME "User Parameters"
 
-// Thermcouples
+// SPI RTD/Thermocouple Boards
 #elif THERMISTOR_ID == -5
   #define THERMISTOR_NAME "MAX31865"
-#elif THERMISTOR_ID == -4
-  #define THERMISTOR_NAME "AD8495"
 #elif THERMISTOR_ID == -3
   #define THERMISTOR_NAME "MAX31855"
 #elif THERMISTOR_ID == -2
   #define THERMISTOR_NAME "MAX6675"
+
+// Analog Thermocouple Boards
+#elif THERMISTOR_ID == -4
+  #define THERMISTOR_NAME "AD8495"
 #elif THERMISTOR_ID == -1
   #define THERMISTOR_NAME "AD595"
 
@@ -70,6 +72,10 @@
   #define THERMISTOR_NAME "Zonestar (P802M Hot Bed)"
 #elif THERMISTOR_ID == 503
   #define THERMISTOR_NAME "Zonestar (Z8XM2 Bed)"
+#elif THERMISTOR_ID == 504
+  #define THERMISTOR_NAME "Zonestar (P802QR2 Hot End)"
+#elif THERMISTOR_ID == 505
+  #define THERMISTOR_NAME "Zonestar (P802QR2 Bed)"
 #elif THERMISTOR_ID == 512
   #define THERMISTOR_NAME "RPW-Ultra"
 #elif THERMISTOR_ID == 6
@@ -89,53 +95,73 @@
 #elif THERMISTOR_ID == 12
   #define THERMISTOR_NAME "E3104FXT (alt)"
 #elif THERMISTOR_ID == 13
-  #define THERMISTOR_NAME "Hisens 3950"
+  #define THERMISTOR_NAME "Hisense 3950"
+#elif THERMISTOR_ID == 14
+  #define THERMISTOR_NAME "100k Ender-5 S1"
 #elif THERMISTOR_ID == 15
   #define THERMISTOR_NAME "100k JGAurora A5"
+#elif THERMISTOR_ID == 17
+  #define THERMISTOR_NAME "100k Dagoma NTC"
 #elif THERMISTOR_ID == 18
   #define THERMISTOR_NAME "ATC Semitec 204GT-2"
-#elif THERMISTOR_ID == 20
-  #define THERMISTOR_NAME "Pt100 UltiMB 5v"
-#elif THERMISTOR_ID == 21
-  #define THERMISTOR_NAME "Pt100 UltiMB 3.3v"
-#elif THERMISTOR_ID == 201
-  #define THERMISTOR_NAME "Pt100 OverLord"
+#elif THERMISTOR_ID == 22
+  #define THERMISTOR_NAME "GTM32 Pro vB (hotend)"
+#elif THERMISTOR_ID == 23
+  #define THERMISTOR_NAME "GTM32 Pro vB (bed)"
 #elif THERMISTOR_ID == 60
   #define THERMISTOR_NAME "Makers Tool"
 #elif THERMISTOR_ID == 70
   #define THERMISTOR_NAME "Hephestos 2"
 #elif THERMISTOR_ID == 75
   #define THERMISTOR_NAME "MGB18"
-#elif THERMISTOR_ID == 99
-  #define THERMISTOR_NAME "100k with 10k pull-up"
 
-// Modified thermistors
-#elif THERMISTOR_ID == 30
-  #define THERMISTOR_NAME "Kis3d EN AW NTC100K/3950"
+// Analog Thermistors - 1kΩ pullup
 #elif THERMISTOR_ID == 51
   #define THERMISTOR_NAME "EPCOS 1K"
 #elif THERMISTOR_ID == 52
   #define THERMISTOR_NAME "ATC204GT-2 1K"
 #elif THERMISTOR_ID == 55
   #define THERMISTOR_NAME "ATC104GT-2 1K"
-#elif THERMISTOR_ID == 1047
-  #define THERMISTOR_NAME "PT1000 4K7"
-#elif THERMISTOR_ID == 1010
-  #define THERMISTOR_NAME "PT1000 1K"
-#elif THERMISTOR_ID == 147
-  #define THERMISTOR_NAME "Pt100 4K7"
+
+// Analog Thermistors - 10kΩ pullup - Atypical
+#elif THERMISTOR_ID == 99
+  #define THERMISTOR_NAME "100k with 10k pull-up"
+
+// Analog RTDs (Pt100/Pt1000)
 #elif THERMISTOR_ID == 110
   #define THERMISTOR_NAME "Pt100 1K"
+#elif THERMISTOR_ID == 147
+  #define THERMISTOR_NAME "Pt100 4K7"
+#elif THERMISTOR_ID == 1010
+  #define THERMISTOR_NAME "PT1000 1K"
+#elif THERMISTOR_ID == 1022
+  #define THERMISTOR_NAME "PT1000 2K2"
+#elif THERMISTOR_ID == 1047
+  #define THERMISTOR_NAME "PT1000 4K7"
+#elif THERMISTOR_ID == 20
+  #define THERMISTOR_NAME "Pt100 UltiMB 5v"
+#elif THERMISTOR_ID == 21
+  #define THERMISTOR_NAME "Pt100 UltiMB 3.3v"
+#elif THERMISTOR_ID == 201
+  #define THERMISTOR_NAME "Pt100 OverLord"
+
+// Modified thermistors
+#elif THERMISTOR_ID == 30
+  #define THERMISTOR_NAME "Kis3d EN AW NTC100K/3950"
 #elif THERMISTOR_ID == 666
   #define THERMISTOR_NAME "Einstart S"
+#elif THERMISTOR_ID == 2000
+  #define THERMISTOR_NAME "TDK NTCG104LH104JT1"
 
 // High Temperature thermistors
 #elif THERMISTOR_ID == 61
   #define THERMISTOR_NAME "Formbot 350°C"
 #elif THERMISTOR_ID == 66
-  #define THERMISTOR_NAME "Dyze 4.7M"
+  #define THERMISTOR_NAME "Dyze / TL 4.7M"
 #elif THERMISTOR_ID == 67
   #define THERMISTOR_NAME "SliceEng 450°C"
+#elif THERMISTOR_ID == 68
+  #define THERMISTOR_NAME "PT-100 + Dyze amp"
 
 // Dummies for dev testing
 #elif THERMISTOR_ID == 998
@@ -145,4 +171,10 @@
 #elif THERMISTOR_ID == 1000
   #define THERMISTOR_NAME "Custom"
 
+// SOC thermistor`
+#elif THERMISTOR_ID == 100
+  #define THERMISTOR_NAME "SOC"
+
 #endif // THERMISTOR_ID
+
+#undef THERMISTOR_ID

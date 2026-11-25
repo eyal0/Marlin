@@ -1,27 +1,65 @@
-import os,shutil
-from SCons.Script import DefaultEnvironment
-from platformio import util
+#
+# generic_create_variant.py
+#
+# Copy one of the variants from buildroot/platformio/variants into
+# the appropriate framework variants folder, so that its contents
+# will be picked up by PlatformIO just like any other variant.
+#
+import pioutil, re
 
-env = DefaultEnvironment()
-platform = env.PioPlatform()
-board = env.BoardConfig()
+marlin_variant_pattern = re.compile("marlin_.*")
+if pioutil.is_pio_build():
+    import shutil, marlin
+    from pathlib import Path
 
-FRAMEWORK_DIR = platform.get_package_dir("framework-arduinoststm32")
-assert os.path.isdir(FRAMEWORK_DIR)
-assert os.path.isdir("buildroot/share/PlatformIO/variants")
+    #
+    # Get the platform name from the 'platform_packages' option,
+    # or look it up by the platform.class.name.
+    #
+    env = pioutil.env
+    platform = env.PioPlatform()
 
-mcu_type = board.get("build.mcu")[:-2]
-variant = board.get("build.variant")
-series = mcu_type[:7].upper() + "xx"
-variant_dir = os.path.join(FRAMEWORK_DIR, "variants", variant)
+    from platformio.package.meta import PackageSpec
+    platform_packages = env.GetProjectOption('platform_packages')
 
-source_dir = os.path.join("buildroot/share/PlatformIO/variants", variant)
-assert os.path.isdir(source_dir)
+    # Remove all tool items from platform_packages
+    platform_packages = [x for x in platform_packages if not x.startswith("platformio/tool-")]
 
-if not os.path.isdir(variant_dir):
-    os.mkdir(variant_dir)
+    if len(platform_packages) == 0:
+        framewords = {
+            "Ststm32Platform": "framework-arduinoststm32",
+            "AtmelavrPlatform": "framework-arduino-avr"
+        }
+        platform_name = framewords[platform.__class__.__name__]
+    else:
+        spec = PackageSpec(platform_packages[0])
+        if spec.uri and '@' in spec.uri:
+            platform_name = re.sub(r'@.+', '', spec.uri)
+        else:
+            platform_name = spec.name
 
-for file_name in os.listdir(source_dir):
-    full_file_name = os.path.join(source_dir, file_name)
-    if os.path.isfile(full_file_name):
-        shutil.copy(full_file_name, variant_dir)
+    FRAMEWORK_DIR = Path(platform.get_package_dir(platform_name))
+    assert FRAMEWORK_DIR.is_dir()
+
+    #
+    # Point variants_dir to our variant folder when board_build.variant
+    # is provided and the variant name begins with "marlin_".
+    #
+    board = env.BoardConfig()
+    variant = board.get("build.variant")
+    #mcu_type = board.get("build.mcu")[:-2]
+    #series = mcu_type[:7].upper() + "xx"
+
+    # Make sure the local variant sub-folder exists
+    if marlin_variant_pattern.match(str(variant).lower()):
+        variants_dir = Path('buildroot', 'share', 'PlatformIO', 'variants')
+        source_dir = Path.cwd() / variants_dir / variant
+        assert source_dir.is_dir()
+        # Relative, so the framework prefixes $PROJECT_DIR. STM32duino escapes '(' and ')'
+        # in a literal path, which breaks the include path when the project path has them.
+        board.update("build.variants_dir", variants_dir.as_posix())
+
+        # STM32duino 2.x includes 'variant_<BOARD>.h' by default. Variants shared by several
+        # boards provide 'variant_generic.h' instead, so select it explicitly.
+        if (source_dir / "variant_generic.h").is_file():
+            board.update("build.arduino.variant_h", "variant_generic.h")

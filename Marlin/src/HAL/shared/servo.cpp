@@ -60,14 +60,14 @@
 ServoInfo_t servo_info[MAX_SERVOS];             // static array of servo info structures
 uint8_t ServoCount = 0;                         // the total number of attached servos
 
-#define SERVO_MIN(v) (MIN_PULSE_WIDTH - (v) * 4) // minimum value in uS for this servo
-#define SERVO_MAX(v) (MAX_PULSE_WIDTH - (v) * 4) // maximum value in uS for this servo
+#define SERVO_MIN_US(v) (MIN_PULSE_WIDTH - (v) * 4) // minimum value in uS for this servo
+#define SERVO_MAX_US(v) (MAX_PULSE_WIDTH - (v) * 4) // maximum value in uS for this servo
 
 /************ static functions common to all instances ***********************/
 
-static boolean isTimerActive(timer16_Sequence_t timer) {
+static bool anyTimerChannelActive(const timer16_Sequence_t timer) {
   // returns true if any servo is active on this timer
-  LOOP_L_N(channel, SERVOS_PER_TIMER) {
+  for (uint8_t channel = 0; channel < SERVOS_PER_TIMER; ++channel) {
     if (SERVO(timer, channel).Pin.isActive)
       return true;
   }
@@ -101,22 +101,23 @@ int8_t Servo::attach(const int inPin, const int inMin, const int inMax) {
   max = (MAX_PULSE_WIDTH - inMax) / 4;
 
   // initialize the timer if it has not already been initialized
-  timer16_Sequence_t timer = SERVO_INDEX_TO_TIMER(servoIndex);
-  if (!isTimerActive(timer)) initISR(timer);
-  servo_info[servoIndex].Pin.isActive = true;  // this must be set after the check for isTimerActive
+  const timer16_Sequence_t timer = SERVO_INDEX_TO_TIMER(servoIndex);
+  if (!anyTimerChannelActive(timer)) initISR(timer);
+  servo_info[servoIndex].Pin.isActive = true;  // this must be set after the check for anyTimerChannelActive
 
   return servoIndex;
 }
 
 void Servo::detach() {
   servo_info[servoIndex].Pin.isActive = false;
-  timer16_Sequence_t timer = SERVO_INDEX_TO_TIMER(servoIndex);
-  if (!isTimerActive(timer)) finISR(timer);
+  const timer16_Sequence_t timer = SERVO_INDEX_TO_TIMER(servoIndex);
+  if (!anyTimerChannelActive(timer)) finISR(timer);
+  //pinMode(servo_info[servoIndex].Pin.nbr, INPUT); // set servo pin to input
 }
 
 void Servo::write(int value) {
   if (value < MIN_PULSE_WIDTH)    // treat values less than 544 as angles in degrees (valid values in microseconds are handled as microseconds)
-    value = map(constrain(value, 0, 180), 0, 180, SERVO_MIN(min), SERVO_MAX(max));
+    value = map(constrain(value, 0, 180), 0, 180, SERVO_MIN_US(min), SERVO_MAX_US(max));
   writeMicroseconds(value);
 }
 
@@ -125,8 +126,8 @@ void Servo::writeMicroseconds(int value) {
   byte channel = servoIndex;
   if (channel < MAX_SERVOS) {  // ensure channel is valid
     // ensure pulse width is valid
-    value = constrain(value, SERVO_MIN(min), SERVO_MAX(max)) - (TRIM_DURATION);
-    value = usToTicks(value);  // convert to ticks after compensating for interrupt overhead - 12 Aug 2009
+    LIMIT(value, SERVO_MIN_US(min), SERVO_MAX_US(max));
+    value = usToTicks(value - (TRIM_DURATION));  // convert to ticks after compensating for interrupt overhead - 12 Aug 2009
 
     CRITICAL_SECTION_START();
     servo_info[channel].ticks = value;
@@ -135,7 +136,7 @@ void Servo::writeMicroseconds(int value) {
 }
 
 // return the value as degrees
-int Servo::read() { return map(readMicroseconds() + 1, SERVO_MIN(min), SERVO_MAX(max), 0, 180); }
+int Servo::read() { return map(readMicroseconds() + 1, SERVO_MIN_US(min), SERVO_MAX_US(max), 0, 180); }
 
 int Servo::readMicroseconds() {
   return (servoIndex == INVALID_SERVO) ? 0 : ticksToUs(servo_info[servoIndex].ticks) + (TRIM_DURATION);

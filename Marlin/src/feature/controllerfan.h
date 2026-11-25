@@ -52,7 +52,8 @@ static constexpr controllerFan_settings_t controllerFan_defaults = {
 class ControllerFan {
   private:
     static uint8_t speed;
-    static void set_fan_speed(const uint8_t s);
+    static uint8_t limited_fan_speed(const uint8_t s) { return s < (CONTROLLERFAN_SPEED_MIN) ? 0 : s; } // Fan OFF below minimum
+    static void set_fan_speed(const uint8_t s) { speed = limited_fan_speed(s); }
 
   public:
     #if ENABLED(CONTROLLER_FAN_EDITABLE)
@@ -60,9 +61,12 @@ class ControllerFan {
     #else
       static const controllerFan_settings_t &settings;
     #endif
-    static inline bool state() { return speed > 0; }
-    static inline void init() { reset(); }
-    static inline void reset() { TERN_(CONTROLLER_FAN_EDITABLE, settings = controllerFan_defaults); }
+    #if ENABLED(FAN_SOFT_PWM)
+      static uint8_t soft_pwm_speed;
+    #endif
+    static bool state() { return speed > 0; }
+    static void init() { reset(); }
+    static void reset() { TERN_(CONTROLLER_FAN_EDITABLE, settings = controllerFan_defaults); }
     static void setup();
     static void update();
 };

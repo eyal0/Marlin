@@ -59,14 +59,14 @@
 
 #if HAS_MARLINUI_U8GLIB
 
-#include <U8glib.h>
+#include <U8glib-HAL.h>
 #include "../../shared/HAL_SPI.h"
 #include "../../shared/Delay.h"
 
 void spiBegin();
 void spiInit(uint8_t spiRate);
 void spiSend(uint8_t b);
-void spiSend(const uint8_t* buf, size_t n);
+void spiSend(const uint8_t *buf, size_t n);
 
 static uint8_t rs_last_state = 255;
 
@@ -134,5 +134,4 @@ uint8_t u8g_com_HAL_LPC1768_ST7920_hw_spi_fn(u8g_t *u8g, uint8_t msg, uint8_t ar
 }
 
 #endif // HAS_MARLINUI_U8GLIB
-
 #endif // TARGET_LPC1768

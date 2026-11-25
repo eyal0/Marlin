@@ -23,13 +23,15 @@
 
 /**
  * Mega controller pin assignments
+ * Schematic: https://reprap.org/mediawiki/images/b/ba/Mega_controller.pdf
+ * ATmega2560
  */
 
-#if NOT_TARGET(__AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#elif HOTENDS > 2 || E_STEPPERS > 2
-  #error "Mega Controller supports up to 2 hotends / E-steppers. Comment out this line to continue."
+#if HOTENDS > 2 || E_STEPPERS > 2
+  #error "Mega Controller supports up to 2 hotends / E steppers."
 #endif
+
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Mega Controller"
 
@@ -84,13 +86,13 @@
 //
 // Temperature Sensors
 //
-#if TEMP_SENSOR_0 == -1
+#if TEMP_SENSOR_0_IS_AD595
   #define TEMP_0_PIN                           4  // Analog Input
 #else
   #define TEMP_0_PIN                           0  // Analog Input
 #endif
 
-#if TEMP_SENSOR_1 == -1
+#if TEMP_SENSOR_1_IS_AD595
   #define TEMP_1_PIN                           5  // Analog Input
 #else
   #define TEMP_1_PIN                           2  // Analog Input
@@ -98,7 +100,7 @@
 
 #define TEMP_2_PIN                             3  // Analog Input
 
-#if TEMP_SENSOR_BED == -1
+#if TEMP_SENSOR_BED_IS_AD595
   #define TEMP_BED_PIN                         6  // Analog Input
 #else
   #define TEMP_BED_PIN                         1  // Analog Input
@@ -111,8 +113,8 @@
 #define HEATER_1_PIN                          34
 #define HEATER_BED_PIN                        28
 
-#ifndef FAN_PIN
-  #define FAN_PIN                             39
+#ifndef FAN0_PIN
+  #define FAN0_PIN                            39
 #endif
 #define FAN1_PIN                              35
 #define FAN2_PIN                              36
@@ -121,47 +123,75 @@
   #define CONTROLLER_FAN_PIN            FAN2_PIN
 #endif
 
-#define FAN_SOFT_PWM
+#define FAN_SOFT_PWM_REQUIRED
 
 //
 // Misc. Functions
 //
-#define SDSS                                  53
+#define SD_SS_PIN                        MINI_06
 #define LED_PIN                               13
 
 #ifndef CASE_LIGHT_PIN
   #define CASE_LIGHT_PIN                       2
 #endif
 
+/**
+ * MegaController LCD/SD Connector
+ *
+ *     SDD   MOSI  SDSS  --   RESET  --  LCDSS  A0    KILL  ENC
+ *     49    51    53           |         45    47    12    10
+ *     PL0   PB2   PB0          |         PL4   PL2   PB6   PB4
+ *    ----------------------------------------------------------
+ *   |  2     4     6     8    10    12    14    16    18    20 |
+ *   |  1     3     5     7     9    11    13    15    17    19 |
+ *    ----------------------------------------------------------
+ *     |     PB3   PB1    |     |         PL5   PL3   PL1   PB5
+ *     |     50    52     |     |         44    46    48    11
+ *     5V    MISO  SCK   GND   3V3   --   BL    BEEP  EN1   EN2
+ */
+#define MINI_02                               49  // SD_DETECT
+#define MINI_03                               50  // MISO
+#define MINI_04                               51  // MOSI
+#define MINI_05                               52  // SCK
+#define MINI_06                               53  // SDSS
+#define MINI_13                               44  // BACKLIGHT
+#define MINI_14                               45  // LCDSS
+#define MINI_15                               46  // BEEP
+#define MINI_16                               47  // A0
+#define MINI_17                               48  // EN1
+#define MINI_18                               12  // KILL
+#define MINI_19                               11  // EN2
+#define MINI_20                               10  // ENC
+
 //
 // LCD / Controller
 //
+
 #if ENABLED(MINIPANEL)
 
-  #define BEEPER_PIN                          46
-  // Pins for DOGM SPI LCD Support
-  #define DOGLCD_A0                           47
-  #define DOGLCD_CS                           45
-  #define LCD_BACKLIGHT_PIN                   44  // backlight LED on PA3
+  #define BEEPER_PIN                     MINI_15
 
-  #define KILL_PIN                            12
-  // GLCD features
-  // Uncomment screen orientation
-  //#define LCD_SCREEN_ROT_90
-  //#define LCD_SCREEN_ROT_180
-  //#define LCD_SCREEN_ROT_270
+  #define DOGLCD_A0                      MINI_16
+  #define DOGLCD_CS                      MINI_14
+  #define LCD_BACKLIGHT_PIN              MINI_13  // backlight LED on PA3
 
-  #define BTN_EN1                             48
-  #define BTN_EN2                             11
-  #define BTN_ENC                             10
+  #define KILL_PIN                       MINI_18
 
-  #define SD_DETECT_PIN                       49
+  #define BTN_ENC                        MINI_20
+  #define BTN_EN1                        MINI_17
+  #define BTN_EN2                        MINI_19
+
+  #define SD_DETECT_PIN                  MINI_02
+
+  //#define LCD_SCREEN_ROTATE                180  // 0, 90, 180, 270
 
 #endif // MINIPANEL
 
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#define SPINDLE_LASER_PWM_PIN                  6  // Hardware PWM
-#define SPINDLE_LASER_ENA_PIN                  7  // Pullup!
-#define SPINDLE_DIR_PIN                        8
+#if HAS_CUTTER
+  #define SPINDLE_LASER_PWM_PIN                6  // Hardware PWM
+  #define SPINDLE_LASER_ENA_PIN                7  // Pullup!
+  #define SPINDLE_DIR_PIN                      8
+#endif

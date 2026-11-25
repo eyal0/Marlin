@@ -2,6 +2,9 @@
  * Marlin 3D Printer Firmware
  * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -19,25 +22,11 @@
 #pragma once
 
 /**
- * HAL Pins Debugging for Teensy 4.0 (IMXRT1062DVL6A) / 4.1 (IMXRT1062DVJ6A)
+ * Pins Debugging for Teensy 4.0 (IMXRT1062DVL6A) / 4.1 (IMXRT1062DVJ6A)
+ * See PinsDebugBase in pins/pinsDebug.h for the hooks.
  */
 
 #warning "PINS_DEBUGGING is not fully supported for Teensy 4.0 / 4.1 so 'M43' may cause hangs."
-
-#define NUMBER_PINS_TOTAL NUM_DIGITAL_PINS
-
-#define digitalRead_mod(p) extDigitalRead(p)  // AVR digitalRead disabled PWM before it read the pin
-#define PRINT_PORT(p)
-#define PRINT_ARRAY_NAME(x) do{ sprintf_P(buffer, PSTR("%-" STRINGIFY(MAX_NAME_LENGTH) "s"), pin_array[x].name); SERIAL_ECHO(buffer); }while(0)
-#define PRINT_PIN(p) do{ sprintf_P(buffer, PSTR("%02d"), p); SERIAL_ECHO(buffer); }while(0)
-#define GET_ARRAY_PIN(p) pin_array[p].pin
-#define GET_ARRAY_IS_DIGITAL(p) pin_array[p].is_digital
-#define VALID_PIN(pin) (pin >= 0 && pin < (int8_t)NUMBER_PINS_TOTAL ? 1 : 0)
-#define DIGITAL_PIN_TO_ANALOG_PIN(p) int(p - analogInputToDigitalPin(0))
-#define IS_ANALOG(P) ((P) >= analogInputToDigitalPin(0) && (P) <= analogInputToDigitalPin(13)) || ((P) >= analogInputToDigitalPin(14) && (P) <= analogInputToDigitalPin(17))
-#define pwm_status(pin) HAL_pwm_status(pin)
-#define GET_PINMODE(PIN) (VALID_PIN(pin) && IS_OUTPUT(pin))
-#define MULTI_NAME_PAD 16 // space needed to be pretty if not first name assigned to a pin
 
 struct pwm_pin_info_struct {
   uint8_t type;    // 0=no pwm, 1=flexpwm, 2=quad
@@ -116,12 +105,12 @@ const struct pwm_pin_info_struct pwm_pin_info[] = {
   #endif
 };
 
-void HAL_print_analog_pin(char buffer[], int8_t pin) {
+void printAnalogPin(char buffer[], const pin_t pin) {
   if (pin <= 23)      sprintf_P(buffer, PSTR("(A%2d)  "), int(pin - 14));
   else if (pin <= 41) sprintf_P(buffer, PSTR("(A%2d)  "), int(pin - 24));
 }
 
-void HAL_analog_pin_state(char buffer[], int8_t pin) {
+void analog_pin_state(char buffer[], const pin_t pin) {
   if (pin <= 23)      sprintf_P(buffer, PSTR("Analog in =% 5d"), analogRead(pin - 14));
   else if (pin <= 41) sprintf_P(buffer, PSTR("Analog in =% 5d"), analogRead(pin - 24));
 }
@@ -132,14 +121,14 @@ void HAL_analog_pin_state(char buffer[], int8_t pin) {
  * Print a pin's PWM status.
  * Return true if it's currently a PWM pin.
  */
-bool HAL_pwm_status(int8_t pin) {
+static bool flexpwm_status(const pin_t pin) {
   char buffer[20];   // for the sprintf statements
   const struct pwm_pin_info_struct *info;
 
-  if (pin >= CORE_NUM_DIGITAL) return 0;
-  info = pwm_pin_info + pin;
+  if (pin >= CORE_NUM_DIGITAL) return false;
 
-  if (info->type == 0) return 0;
+  info = pwm_pin_info + pin;
+  if (info->type == 0) return false;
 
   /* TODO decode pwm value from timers */
   // for now just indicate if output is set as pwm
@@ -147,4 +136,24 @@ bool HAL_pwm_status(int8_t pin) {
   return (*(portConfigRegister(pin)) == info->muxval);
 }
 
-static void pwm_details(uint8_t pin) { /* TODO */ }
+struct PinsDebug : PinsDebugBase<PinsDebug> {
+  static constexpr uint16_t count = NUM_DIGITAL_PINS;
+  static constexpr uint8_t name_pad = 16;   // space needed to be pretty if not first name assigned to a pin
+
+  static bool is_valid(const pin_t pin) { return pin >= 0 && pin < pin_t(count); }
+  static int16_t analog_index(const pin_t pin) { return int(pin - analogInputToDigitalPin(0)); }
+  static bool is_analog(const pin_t pin) {
+    return (pin >= analogInputToDigitalPin(0) && pin <= analogInputToDigitalPin(13))
+        || (pin >= analogInputToDigitalPin(14) && pin <= analogInputToDigitalPin(17));
+  }
+  static bool is_output(const pin_t pin) { return is_valid(pin) && IS_OUTPUT(pin); }
+  static bool pwm_active(const pin_t pin) { return flexpwm_status(pin); }
+
+  // TODO: print_pwm
+
+  static void print_number(const pin_t pin) {
+    char buffer[10];
+    sprintf_P(buffer, PSTR("%02d"), pin);
+    SERIAL_ECHO(buffer);
+  }
+};

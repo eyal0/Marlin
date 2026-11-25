@@ -57,9 +57,9 @@
  *                                           3.3V |               | GND
  *        Z_STOP_PIN                           24 |   40 * * 53   |    A22 DAC1
  *  AUX2                                       25 |   41 * * 52   |    A21 DAC0
- *  AUX2  FAN_PIN             SCL2    TX1      26 |   42 * * 51   | 39 A20      MISO0             SDSS
+ *  AUX2  FAN0_PIN            SCL2    TX1      26 |   42 * * 51   | 39 A20      MISO0             SDSS
  *  AUX2  Z-PROBE PWR         SCK0    RX1      27 | *  *  *  *  * | 38 A19 PWM        SDA1
- *  AUX2  SOL1_PIN            MOSI0            28 |   43 * * 50   | 37 A18 PWM        SCL1
+ *  AUX2  SOL0_PIN            MOSI0            28 |   43 * * 50   | 37 A18 PWM        SCL1
  *  D10   CONTROLLER_FAN_PIN  CAN0TX       PWM 29 |   44 * * 49   | 36 A17 PWM
  *  D9    HEATER_0_PIN        CAN0RX       PWM 30 |   45 * * 48   | 35 A16 PWM                    E1_ENABLE_PIN
  *  D8    HEATER_BED_PIN      CS1     RX4  A12 31 |   46 * * 47   | 34 A15 PWM        SDA0  RX5   E1_DIR_PIN
@@ -67,7 +67,7 @@
  *
  *            Interior pins:
  *                            LCD_PINS_RS             40 * * 53   SCK2
- *                            LCD_PINS_ENABLE         41 * * 52   MOSI2
+ *                            LCD_PINS_EN             41 * * 52   MOSI2
  *                            LCD_PINS_D4             42 * * 51   MISO2
  *                            LCD_PINS_D5     CS2     43 * * 50   A24
  *                            LCD_PINS_D6     MOSI2   44 * * 49   A23
@@ -109,8 +109,8 @@
 #define HEATER_0_PIN                          30
 #define HEATER_1_PIN                          36
 #define HEATER_BED_PIN                        31
-#ifndef FAN_PIN
-  #define FAN_PIN                              2
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             2
 #endif
 
 #define TEMP_0_PIN                             2  // Extruder / Analog pin numbering: 2 => A2
@@ -123,16 +123,16 @@
 #define LED_PIN                               13
 #define PS_ON_PIN                              1
 #define FILWIDTH_PIN                           6
-#define SOL1_PIN                              28
+#define SOL0_PIN                              28
 
 //
 // SD Card
 //
-#define SDSS                                  39  // 8
+#define SD_SS_PIN                             39  // 8
 
 #if HAS_WIRED_LCD
   #define LCD_PINS_RS                         40
-  #define LCD_PINS_ENABLE                     41
+  #define LCD_PINS_EN                         41
   #define LCD_PINS_D4                         42
   #define LCD_PINS_D5                         43
   #define LCD_PINS_D6                         44
@@ -146,7 +146,7 @@
 #endif
 
 #if IS_RRW_KEYPAD
-  #define SHIFT_OUT                           40
-  #define SHIFT_CLK                           44
-  #define SHIFT_LD                            42
+  #define SHIFT_OUT_PIN                       40
+  #define SHIFT_CLK_PIN                       44
+  #define SHIFT_LD_PIN                        42
 #endif

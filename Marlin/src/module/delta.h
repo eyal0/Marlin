@@ -32,9 +32,9 @@ extern float delta_height;
 extern abc_float_t delta_endstop_adj;
 extern float delta_radius,
              delta_diagonal_rod,
-             delta_segments_per_second;
+             segments_per_second;
 extern abc_float_t delta_tower_angle_trim;
-extern xy_float_t delta_tower[ABC];
+extern xy_float_t delta_tower[3];
 extern abc_float_t delta_diagonal_rod_2_tower;
 extern float delta_clip_start_height;
 extern abc_float_t delta_diagonal_rod_trim;
@@ -48,14 +48,8 @@ void recalc_delta_settings();
 /**
  * Get a safe radius for calibration
  */
-#if ENABLED(DELTA_AUTO_CALIBRATION)
-  extern float calibration_radius_factor;
-#else
-  constexpr float calibration_radius_factor = 1;
-#endif
-
-#if EITHER(DELTA_AUTO_CALIBRATION, DELTA_CALIBRATION_MENU)
-  float delta_calibration_radius();
+#if HAS_DELTA_SENSORLESS_PROBING
+  static constexpr float sensorless_radius_factor = 0.7f;
 #endif
 
 /**
@@ -70,7 +64,7 @@ void recalc_delta_settings();
  *
  * Suggested optimizations include:
  *
- * - Disable the home_offset (M206) and/or position_shift (G92)
+ * - Disable the home_offset (M206) and/or workspace_offset (G92)
  *   features to remove up to 12 float additions.
  *
  * - Use a fast-inverse-sqrt function and add the reciprocal.
@@ -85,7 +79,7 @@ void recalc_delta_settings();
     )                                     \
   )
 
-#define DELTA_IK(V) delta.set(DELTA_Z(V, A_AXIS), DELTA_Z(V, B_AXIS), DELTA_Z(V, C_AXIS))
+#define DELTA_IK(V) motion.delta.set(DELTA_Z(V, A_AXIS), DELTA_Z(V, B_AXIS), DELTA_Z(V, C_AXIS))
 
 void inverse_kinematics(const xyz_pos_t &raw);
 
@@ -94,6 +88,8 @@ void inverse_kinematics(const xyz_pos_t &raw);
  * effector has the full range of XY motion.
  */
 float delta_safe_distance_from_top();
+
+void refresh_delta_clip_start_height();
 
 /**
  * Delta Forward Kinematics
@@ -118,12 +114,12 @@ float delta_safe_distance_from_top();
  * based on a Java function from "Delta Robot Kinematics V3"
  * by Steve Graves
  *
- * The result is stored in the cartes[] array.
+ * The result is stored in the motion.cartes[] array.
  */
-void forward_kinematics_DELTA(const float &z1, const float &z2, const float &z3);
+void forward_kinematics(const float z1, const float z2, const float z3);
 
-FORCE_INLINE void forward_kinematics_DELTA(const abc_float_t &point) {
-  forward_kinematics_DELTA(point.a, point.b, point.c);
+FORCE_INLINE void forward_kinematics(const abc_float_t &point) {
+  forward_kinematics(point.a, point.b, point.c);
 }
 
 void home_delta();

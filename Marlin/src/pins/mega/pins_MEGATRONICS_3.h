@@ -23,11 +23,11 @@
 
 /**
  * MegaTronics v3.0 / v3.1 / v3.2 pin assignments
+ * Schematic: https://github.com/brupje/Megatronics_3/blob/master/Design%20Files/megatronics.sch
+ * ATmega2560
  */
 
-#if NOT_TARGET(__AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #if MB(MEGATRONICS_32)
   #define BOARD_INFO_NAME "Megatronics v3.2"
@@ -69,9 +69,19 @@
 #define X_DIR_PIN                             57
 #define X_ENABLE_PIN                          59
 
-#define Y_STEP_PIN                             5
-#define Y_DIR_PIN                             17
-#define Y_ENABLE_PIN                           4
+#if ENABLED(REPRAPWORLD_KEYPAD) && EXTRUDERS <= 2
+  #define Y_ENABLE_PIN                        23
+  #define Y_STEP_PIN                          22
+  #define Y_DIR_PIN                           60
+#else
+  #define Y_STEP_PIN                           5
+  #define Y_DIR_PIN                           17
+  #define Y_ENABLE_PIN                         4
+
+  #define E2_STEP_PIN                         22
+  #define E2_DIR_PIN                          60
+  #define E2_ENABLE_PIN                       23
+#endif
 
 #define Z_STEP_PIN                            16
 #define Z_DIR_PIN                             11
@@ -85,29 +95,25 @@
 #define E1_DIR_PIN                            24
 #define E1_ENABLE_PIN                         26
 
-#define E2_STEP_PIN                           22
-#define E2_DIR_PIN                            60
-#define E2_ENABLE_PIN                         23
-
 //
 // Temperature Sensors
 //
-#if TEMP_SENSOR_0 == -1
+#if TEMP_SENSOR_0_IS_AD595
   #define TEMP_0_PIN                          11  // Analog Input
 #else
   #define TEMP_0_PIN                          15  // Analog Input
 #endif
-#if TEMP_SENSOR_1 == -1
+#if TEMP_SENSOR_1_IS_AD595
   #define TEMP_1_PIN                          10  // Analog Input
 #else
   #define TEMP_1_PIN                          13  // Analog Input
 #endif
-#if TEMP_SENSOR_2 == -1
+#if TEMP_SENSOR_2_IS_AD595
   #define TEMP_2_PIN                           9  // Analog Input
 #else
   #define TEMP_2_PIN                          12  // Analog Input
 #endif
-#if TEMP_SENSOR_BED == -1
+#if TEMP_SENSOR_BED_IS_AD595
   #define TEMP_BED_PIN                         8  // Analog Input
 #else
   #define TEMP_BED_PIN                        14  // Analog Input
@@ -121,15 +127,15 @@
 #define HEATER_2_PIN                           8
 #define HEATER_BED_PIN                        10
 
-#ifndef FAN_PIN
-  #define FAN_PIN                              6
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             6
 #endif
 #define FAN1_PIN                               7
 
 //
 // Misc. Functions
 //
-#define SDSS                                  53
+#define SD_SS_PIN                             53
 #define LED_PIN                               13
 #define PS_ON_PIN                             12
 
@@ -149,23 +155,23 @@
 #if ENABLED(REPRAPWORLD_GRAPHICAL_LCD)
 
   #define LCD_PINS_RS                         56  // CS chip select / SS chip slave select
-  #define LCD_PINS_ENABLE                     51  // SID (MOSI)
+  #define LCD_PINS_EN                         51  // SID (MOSI)
   #define LCD_PINS_D4                         52  // SCK (CLK) clock
   #define SD_DETECT_PIN                       35
 
 #else
 
   #define LCD_PINS_RS                         32
-  #define LCD_PINS_ENABLE                     31
+  #define LCD_PINS_EN                         31
   #define LCD_PINS_D4                         14
   #define LCD_PINS_D5                         30
   #define LCD_PINS_D6                         39
   #define LCD_PINS_D7                         15
 
-  #define SHIFT_CLK                           43
-  #define SHIFT_LD                            35
-  #define SHIFT_OUT                           34
-  #define SHIFT_EN                            44
+  #define SHIFT_CLK_PIN                       43
+  #define SHIFT_LD_PIN                        35
+  #define SHIFT_OUT_PIN                       34
+  #define SHIFT_EN_PIN                        44
 
   #if MB(MEGATRONICS_31, MEGATRONICS_32)
     #define SD_DETECT_PIN                     56
@@ -183,15 +189,6 @@
 #elif EXTRUDERS <= 2
   // Hijack the last extruder so that we can get the PWM signal off the Y breakout
   // Move Y to the E2 plug. This makes dual Y steppers harder
-  #undef Y_ENABLE_PIN                             //  4
-  #undef Y_STEP_PIN                               //  5
-  #undef Y_DIR_PIN                                // 17
-  #undef E2_ENABLE_PIN                            // 23
-  #undef E2_STEP_PIN                              // 22
-  #undef E2_DIR_PIN                               // 60
-  #define Y_ENABLE_PIN                        23
-  #define Y_STEP_PIN                          22
-  #define Y_DIR_PIN                           60
   #define SPINDLE_LASER_PWM_PIN                4  // Hardware PWM
   #define SPINDLE_LASER_ENA_PIN               17  // Pullup!
   #define SPINDLE_DIR_PIN                      5

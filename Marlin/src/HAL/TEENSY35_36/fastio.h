@@ -28,7 +28,7 @@
  */
 
 #ifndef MASK
-  #define MASK(PIN) (1 << PIN)
+  #define MASK(PIN) _BV(PIN)
 #endif
 
 #define GPIO_BITBAND_ADDR(reg, bit) (((uint32_t)&(reg) - 0x40000000) * 32 + (bit) * 4 + 0x42000000)
@@ -53,17 +53,17 @@
 
 #define _SET_INPUT(P) do{ \
   CORE_PIN ## P ## _CONFIG = PORT_PCR_MUX(1); \
-  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG , CORE_PIN ## P ## _BIT) = 0; \
+  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG, CORE_PIN ## P ## _BIT) = 0; \
 }while(0)
 
 #define _SET_OUTPUT(P) do{ \
   CORE_PIN ## P ## _CONFIG = PORT_PCR_MUX(1)|PORT_PCR_SRE|PORT_PCR_DSE; \
-  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG , CORE_PIN ## P ## _BIT) = 1; \
+  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG, CORE_PIN ## P ## _BIT) = 1; \
 }while(0)
 
 #define _SET_INPUT_PULLUP(P) do{ \
   CORE_PIN ## P ## _CONFIG = PORT_PCR_MUX(1) | PORT_PCR_PE | PORT_PCR_PS; \
-  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG , CORE_PIN ## P ## _BIT) = 0; \
+  GPIO_BITBAND(CORE_PIN ## P ## _DDRREG, CORE_PIN ## P ## _BIT) = 0; \
 }while(0)
 
 #define _IS_INPUT(P)    ((CORE_PIN ## P ## _DDRREG & CORE_PIN ## P ## _BITMASK) == 0)

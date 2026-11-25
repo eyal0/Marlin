@@ -22,46 +22,54 @@
 
 #include "../../inc/MarlinConfig.h"
 
-#if HAS_M206_COMMAND
+#if HAS_HOME_OFFSET
 
 #include "../gcode.h"
 #include "../../module/motion.h"
 #include "../../lcd/marlinui.h"
 #include "../../libs/buzzer.h"
-#include "../../MarlinCore.h"
-
-extern const char SP_Y_STR[], SP_Z_STR[];
-
-void m206_report() {
-  SERIAL_ECHOLNPAIR_P(PSTR("M206 X"), home_offset.x, SP_Y_STR, home_offset.y, SP_Z_STR, home_offset.z);
-}
 
 /**
  * M206: Set Additional Homing Offset (X Y Z). SCARA aliases T=X, P=Y
  *
- * *** @thinkyhead: I recommend deprecating M206 for SCARA in favor of M665.
- * ***              M206 for SCARA will remain enabled in 1.1.x for compatibility.
- * ***              In the 2.0 release, it will simply be disabled by default.
+ * *** TODO: Deprecate M206 for SCARA in favor of M665.
  */
 void GcodeSuite::M206() {
-  LOOP_XYZ(i)
-    if (parser.seen(XYZ_CHAR(i)))
-      set_home_offset((AxisEnum)i, parser.value_linear_units());
-
-  #if ENABLED(MORGAN_SCARA)
-    if (parser.seen('T')) set_home_offset(A_AXIS, parser.value_float()); // Theta
-    if (parser.seen('P')) set_home_offset(B_AXIS, parser.value_float()); // Psi
+  if (!parser.seen_any()) return M206_report();
+  LOOP_NUM_AXES(a)
+    if (parser.seenval(AXIS_CHAR(a))) motion.set_home_offset((AxisEnum)a, parser.value_axis_units((AxisEnum)a));
+  #if ENABLED(SCARA)
+    if (parser.seenval('T')) motion.set_home_offset(A_AXIS, parser.value_float()); // Theta
+    if (parser.seenval('P')) motion.set_home_offset(B_AXIS, parser.value_float()); // Psi
   #endif
 
-  if (!parser.seen("XYZ"))
-    m206_report();
-  else
-    report_current_position();
+  motion.report_position();
+}
+
+void GcodeSuite::M206_report(const bool forReplay/*=true*/) {
+  TERN_(MARLIN_SMALL_BUILD, return);
+
+  report_heading_etc(forReplay, F(STR_HOME_OFFSET));
+  #if IS_CARTESIAN
+    SERIAL_ECHOLNPGM_P(NUM_AXIS_PAIRED_LIST(
+      PSTR("  M206 X"), LINEAR_UNIT(motion.home_offset.x),
+      SP_Y_STR, LINEAR_UNIT(motion.home_offset.y),
+      SP_Z_STR, LINEAR_UNIT(motion.home_offset.z),
+      SP_I_STR, I_AXIS_UNIT(motion.home_offset.i),
+      SP_J_STR, J_AXIS_UNIT(motion.home_offset.j),
+      SP_K_STR, K_AXIS_UNIT(motion.home_offset.k),
+      SP_U_STR, U_AXIS_UNIT(motion.home_offset.u),
+      SP_V_STR, V_AXIS_UNIT(motion.home_offset.v),
+      SP_W_STR, W_AXIS_UNIT(motion.home_offset.w)
+    ));
+  #else
+    SERIAL_ECHOLNPGM_P(PSTR("  M206 Z"), LINEAR_UNIT(motion.home_offset.z));
+  #endif
 }
 
 /**
  * M428: Set home_offset based on the distance between the
- *       current_position and the nearest "reference point."
+ *       current position and the nearest "reference point."
  *       If an axis is past center its endstop position
  *       is the reference-point. Otherwise it uses 0. This allows
  *       the Z offset to be set near the bed when using a max endstop.
@@ -71,26 +79,25 @@ void GcodeSuite::M206() {
  *       Use M206 to set these values directly.
  */
 void GcodeSuite::M428() {
-  if (homing_needed_error()) return;
+  if (motion.homing_needed_error()) return;
 
   xyz_float_t diff;
-  LOOP_XYZ(i) {
-    diff[i] = base_home_pos((AxisEnum)i) - current_position[i];
-    if (!WITHIN(diff[i], -20, 20) && home_dir((AxisEnum)i) > 0)
-      diff[i] = -current_position[i];
+  LOOP_NUM_AXES(i) {
+    diff[i] = motion.base_home_pos((AxisEnum)i) - motion.position[i];
+    if (!WITHIN(diff[i], -20, 20) && motion.home_dir((AxisEnum)i) > 0)
+      diff[i] = -motion.position[i];
     if (!WITHIN(diff[i], -20, 20)) {
       SERIAL_ERROR_MSG(STR_ERR_M428_TOO_FAR);
-      LCD_ALERTMESSAGEPGM_P(PSTR("Err: Too far!"));
-      BUZZ(200, 40);
+      LCD_ALERTMESSAGE(MSG_ERR_M428_TOO_FAR);
+      ERR_BUZZ();
       return;
     }
   }
 
-  LOOP_XYZ(i) set_home_offset((AxisEnum)i, diff[i]);
-  report_current_position();
-  LCD_MESSAGEPGM(MSG_HOME_OFFSETS_APPLIED);
-  BUZZ(100, 659);
-  BUZZ(100, 698);
+  LOOP_NUM_AXES(i) motion.set_home_offset((AxisEnum)i, diff[i]);
+  motion.report_position();
+  LCD_MESSAGE(MSG_HOME_OFFSETS_APPLIED);
+  OKAY_BUZZ();
 }
 
-#endif // HAS_M206_COMMAND
+#endif // HAS_HOME_OFFSET

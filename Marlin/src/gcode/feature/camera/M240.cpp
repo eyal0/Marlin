@@ -25,14 +25,10 @@
 #if ENABLED(PHOTO_GCODE)
 
 #include "../../gcode.h"
-#include "../../../module/motion.h" // for active_extruder and current_position
+#include "../../../module/motion.h" // for motion.extruder and motion.position
 
 #if PIN_EXISTS(CHDK)
   millis_t chdk_timeout; // = 0
-#endif
-
-#if defined(PHOTO_POSITION) && PHOTO_DELAY_MS > 0
-  #include "../../../MarlinCore.h" // for idle()
 #endif
 
 #ifdef PHOTO_RETRACT_MM
@@ -47,9 +43,9 @@
   #endif
 
   #ifdef PHOTO_RETRACT_MM
-    inline void e_move_m240(const float length, const feedRate_t &fr_mm_s) {
-      if (length && thermalManager.hotEnoughToExtrude(active_extruder))
-        unscaled_e_move(length, fr_mm_s);
+    inline void e_move_m240(const float length, const feedRate_t fr_mm_s) {
+      if (length && thermalManager.hotEnoughToExtrude(motion.extruder))
+        motion.unscaled_e_move(length, fr_mm_s);
     }
   #endif
 
@@ -84,7 +80,7 @@
 
     inline void spin_photo_pin() {
       static constexpr uint32_t sequence[] = PHOTO_PULSES_US;
-      LOOP_L_N(i, COUNT(sequence))
+      for (uint8_t i = 0; i < COUNT(sequence); ++i)
         pulse_photo_pin(sequence[i], !(i & 1));
     }
 
@@ -100,9 +96,9 @@
  * M240: Trigger a camera by...
  *
  *  - CHDK                  : Emulate a Canon RC-1 with a configurable ON duration.
- *                            https://captain-slow.dk/2014/03/09/3d-printing-timelapses/
+ *                            https://youtube.be/UqZ8Um5MZEA
  *  - PHOTOGRAPH_PIN        : Pulse a digital pin 16 times.
- *                            See https://www.doc-diy.net/photo/rc-1_hacked/
+ *                            See https://web.archive.org/web/20250327153953/www.doc-diy.net/photo/rc-1_hacked/
  *  - PHOTO_SWITCH_POSITION : Bump a physical switch with the X-carriage using a
  *                            configured position, delay, and retract length.
  *
@@ -111,7 +107,7 @@
  *    B - Y offset to the return position
  *    F - Override the XY movement feedrate
  *    R - Retract/recover length (current units)
- *    S - Retract/recover feedrate (mm/m)
+ *    S - Retract/recover feedrate (mm/min)
  *    X - Move to X before triggering the shutter
  *    Y - Move to Y before triggering the shutter
  *    Z - Raise Z by a distance before triggering the shutter
@@ -126,52 +122,45 @@ void GcodeSuite::M240() {
 
   #ifdef PHOTO_POSITION
 
-    if (homing_needed_error()) return;
+    if (motion.homing_needed_error()) return;
 
-    const xyz_pos_t old_pos = {
-      current_position.x + parser.linearval('A'),
-      current_position.y + parser.linearval('B'),
-      current_position.z
-    };
+    const xyz_pos_t old_pos = NUM_AXIS_ARRAY(
+      motion.position.x + parser.linearval('A'),
+      motion.position.y + parser.linearval('B'),
+      motion.position.z,
+      motion.position.i, motion.position.j, motion.position.k,
+      motion.position.u, motion.position.v, motion.position.w
+    );
 
     #ifdef PHOTO_RETRACT_MM
-      const float rval = parser.seenval('R') ? parser.value_linear_units() : _PHOTO_RETRACT_MM;
-      feedRate_t sval = (
-        #if ENABLED(ADVANCED_PAUSE_FEATURE)
-          PAUSE_PARK_RETRACT_FEEDRATE
-        #elif ENABLED(FWRETRACT)
-          RETRACT_FEEDRATE
-        #else
-          45
-        #endif
-      );
-      if (parser.seenval('S')) sval = parser.value_feedrate();
+      const float rval = parser.linearval('R', _PHOTO_RETRACT_MM);
+      const feedRate_t sval = parser.feedrateval('S', TERN(ADVANCED_PAUSE_FEATURE, PAUSE_PARK_RETRACT_FEEDRATE, TERN(FWRETRACT, RETRACT_FEEDRATE, 45)));
       e_move_m240(-rval, sval);
     #endif
 
-    feedRate_t fr_mm_s = MMM_TO_MMS(parser.linearval('F'));
+    feedRate_t fr_mm_s = parser.feedrateval('F');
     if (fr_mm_s) NOLESS(fr_mm_s, 10.0f);
 
     constexpr xyz_pos_t photo_position = PHOTO_POSITION;
     xyz_pos_t raw = {
-       parser.seenval('X') ? RAW_X_POSITION(parser.value_linear_units()) : photo_position.x,
-       parser.seenval('Y') ? RAW_Y_POSITION(parser.value_linear_units()) : photo_position.y,
-      (parser.seenval('Z') ? parser.value_linear_units() : photo_position.z) + current_position.z
+       parser.seenval('X') ? motion.raw_x(parser.value_linear_units()) : photo_position.x,
+       parser.seenval('Y') ? motion.raw_y(parser.value_linear_units()) : photo_position.y,
+      (parser.seenval('Z') ? parser.value_linear_units() : photo_position.z) + motion.position.z
     };
-    apply_motion_limits(raw);
-    do_blocking_move_to(raw, fr_mm_s);
+    motion.apply_limits(raw);
+    motion.blocking_move(raw, fr_mm_s);
 
     #ifdef PHOTO_SWITCH_POSITION
       constexpr xy_pos_t photo_switch_position = PHOTO_SWITCH_POSITION;
       const xy_pos_t sraw = {
-         parser.seenval('I') ? RAW_X_POSITION(parser.value_linear_units()) : photo_switch_position.x,
-         parser.seenval('J') ? RAW_Y_POSITION(parser.value_linear_units()) : photo_switch_position.y
+         parser.seenval('I') ? motion.raw_x(parser.value_linear_units()) : photo_switch_position.x,
+         parser.seenval('J') ? motion.raw_y(parser.value_linear_units()) : photo_switch_position.y
       };
-      do_blocking_move_to_xy(sraw, get_homing_bump_feedrate(X_AXIS));
+      motion.blocking_move_xy(sraw, motion.get_homing_bump_feedrate(X_AXIS));
       #if PHOTO_SWITCH_MS > 0
         safe_delay(parser.intval('D', PHOTO_SWITCH_MS));
       #endif
-      do_blocking_move_to(raw);
+      motion.blocking_move(raw);
     #endif
 
   #endif
@@ -179,7 +168,7 @@ void GcodeSuite::M240() {
   #if PIN_EXISTS(CHDK)
 
     OUT_WRITE(CHDK_PIN, HIGH);
-    chdk_timeout = millis() + parser.intval('D', PHOTO_SWITCH_MS);
+    chdk_timeout = next_millis(millis() + parser.intval('D', PHOTO_SWITCH_MS));
 
   #elif HAS_PHOTOGRAPH
 
@@ -192,9 +181,9 @@ void GcodeSuite::M240() {
   #ifdef PHOTO_POSITION
     #if PHOTO_DELAY_MS > 0
       const millis_t timeout = millis() + parser.intval('P', PHOTO_DELAY_MS);
-      while (PENDING(millis(), timeout)) idle();
+      while (PENDING(millis(), timeout)) marlin.idle();
     #endif
-    do_blocking_move_to(old_pos, fr_mm_s);
+    motion.blocking_move(old_pos, fr_mm_s);
     #ifdef PHOTO_RETRACT_MM
       e_move_m240(rval, sval);
     #endif

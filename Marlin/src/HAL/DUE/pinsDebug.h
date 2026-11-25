@@ -2,6 +2,9 @@
  * Marlin 3D Printer Firmware
  * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -16,13 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  *
  */
+#pragma once
 
 /**
- * Support routines for Due
- */
-
-/**
- * Translation of routines & variables used by pinsDebug.h
+ * Pins Debugging for DUE
+ * See PinsDebugBase in pins/pinsDebug.h for the hooks.
  */
 
 #include "../shared/Marduino.h"
@@ -50,7 +51,7 @@
  *     The net result is that both the g_pinStatus[pin] array and the PIO_OSR register
  *     needs to be looked at when determining if a pin is an input or an output.
  *
- * b) Due has only pins 6, 7, 8 & 9 enabled for PWMs.  FYI - they run at 1KHz
+ * b) Due has only pins 6, 7, 8 & 9 enabled for PWMs.  FYI - they run at 1kHz
  *
  * c) NUM_DIGITAL_PINS does not include the analog pins
  *
@@ -58,37 +59,43 @@
  *    included just in case.
  */
 
-#define NUMBER_PINS_TOTAL PINS_COUNT
+struct PinsDebug : PinsDebugBase<PinsDebug> {
+  static constexpr uint16_t count = PINS_COUNT;
+  static constexpr uint8_t name_pad = 14;   // space needed to be pretty if not first name assigned to a pin
 
-#define digitalRead_mod(p) extDigitalRead(p)  // AVR digitalRead disabled PWM before it read the pin
-#define PRINT_PORT(p)
-#define PRINT_ARRAY_NAME(x) do{ sprintf_P(buffer, PSTR("%-" STRINGIFY(MAX_NAME_LENGTH) "s"), pin_array[x].name); SERIAL_ECHO(buffer); }while(0)
-#define PRINT_PIN(p) do{ sprintf_P(buffer, PSTR("%02d"), p); SERIAL_ECHO(buffer); }while(0)
-#define GET_ARRAY_PIN(p) pin_array[p].pin
-#define GET_ARRAY_IS_DIGITAL(p) pin_array[p].is_digital
-#define VALID_PIN(pin) (pin >= 0 && pin < (int8_t)NUMBER_PINS_TOTAL ? 1 : 0)
-#define DIGITAL_PIN_TO_ANALOG_PIN(p) int(p - analogInputToDigitalPin(0))
-#define IS_ANALOG(P) WITHIN(P, char(analogInputToDigitalPin(0)), char(analogInputToDigitalPin(NUM_ANALOG_INPUTS - 1)))
-#define pwm_status(pin) (((g_pinStatus[pin] & 0xF) == PIN_STATUS_PWM) && \
-                        ((g_APinDescription[pin].ulPinAttribute & PIN_ATTR_PWM) == PIN_ATTR_PWM))
-#define MULTI_NAME_PAD 14 // space needed to be pretty if not first name assigned to a pin
-
-bool GET_PINMODE(int8_t pin) {  // 1: output, 0: input
-  volatile Pio* port = g_APinDescription[pin].pPort;
-  uint32_t mask = g_APinDescription[pin].ulPin;
-  uint8_t pin_status = g_pinStatus[pin] & 0xF;
-  return (  (pin_status == 0 && (port->PIO_OSR & mask))
-          || pin_status == PIN_STATUS_DIGITAL_OUTPUT
-          || pwm_status(pin));
-}
-
-
-void pwm_details(int32_t pin) {
-  if (pwm_status(pin)) {
-    uint32_t chan = g_APinDescription[pin].ulPWMChannel;
-    SERIAL_ECHOPAIR("PWM = ", PWM_INTERFACE->PWM_CH_NUM[chan].PWM_CDTY);
+  static bool is_valid(const pin_t pin) { return pin >= 0 && pin < pin_t(count); }
+  static int16_t analog_index(const pin_t pin) { return int(pin - analogInputToDigitalPin(0)); }
+  static bool is_analog(const pin_t pin) {
+    return WITHIN(pin, pin_t(analogInputToDigitalPin(0)), pin_t(analogInputToDigitalPin(NUM_ANALOG_INPUTS - 1)));
   }
-}
+
+  static bool pwm_active(const pin_t pin) {
+    return ((g_pinStatus[pin] & 0xF) == PIN_STATUS_PWM)
+        && ((g_APinDescription[pin].ulPinAttribute & PIN_ATTR_PWM) == PIN_ATTR_PWM);
+  }
+
+  static bool is_output(const pin_t pin) {  // 1: output, 0: input
+    volatile Pio* port = g_APinDescription[pin].pPort;
+    uint32_t mask = g_APinDescription[pin].ulPin;
+    uint8_t pin_status = g_pinStatus[pin] & 0xF;
+    return (  (pin_status == 0 && (port->PIO_OSR & mask))
+            || pin_status == PIN_STATUS_DIGITAL_OUTPUT
+            || pwm_active(pin));
+  }
+
+  static void print_pwm(const pin_t pin) {
+    if (pwm_active(pin)) {
+      uint32_t chan = g_APinDescription[pin].ulPWMChannel;
+      SERIAL_ECHOPGM("PWM = ", PWM_INTERFACE->PWM_CH_NUM[chan].PWM_CDTY);
+    }
+  }
+
+  static void print_number(const pin_t pin) {
+    char buffer[10];
+    sprintf_P(buffer, PSTR("%02d"), pin);
+    SERIAL_ECHO(buffer);
+  }
+};
 
 /**
  * DUE Board pin   |  PORT  | Label

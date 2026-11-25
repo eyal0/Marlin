@@ -41,9 +41,7 @@ e-mail   :  support@circuitsathome.com
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
-
 // Interface code
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -298,9 +296,7 @@ again:
 // Only developer serviceable parts below!
 
 ////////////////////////////////////////////////////////////////////////////////
-
 // Main driver code
-
 ////////////////////////////////////////////////////////////////////////////////
 
 UHS_NI UHS_Bulk_Storage::UHS_Bulk_Storage(UHS_USB_HOST_BASE *p) {
@@ -479,10 +475,10 @@ uint8_t UHS_NI UHS_Bulk_Storage::Start() {
                 if(!rcode) {
                         if(!UHS_SLEEP_MS(3)) goto FailUnPlug;
                         BS_HOST_DEBUG("CheckLUN...\r\n");
-                        BS_HOST_DEBUG("%lu\r\n", millis()/1000);
+                        BS_HOST_DEBUG("%" PRIu32 "\r\n", millis()/1000);
                         // Stalls on ***some*** devices, ***WHY***?! Device SAID it is READY!!
                         LUNOk[lun] = CheckLUN(lun);
-                        BS_HOST_DEBUG("%lu\r\n", millis()/1000);
+                        BS_HOST_DEBUG("%" PRIu32 "\r\n", millis()/1000);
                         if(!LUNOk[lun]) LUNOk[lun] = CheckLUN(lun);
                         if(!UHS_SLEEP_MS(1)) goto FailUnPlug;
                         BS_HOST_DEBUG("Checked LUN...\r\n");
@@ -637,11 +633,7 @@ void UHS_NI UHS_Bulk_Storage::Poll() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-
 // SCSI code
-
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -794,13 +786,8 @@ uint8_t UHS_NI UHS_Bulk_Storage::RequestSense(uint8_t lun, uint16_t size, uint8_
         return v;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
-
-
 // USB code
-
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -953,7 +940,6 @@ uint8_t UHS_NI UHS_Bulk_Storage::HandleUsbError(uint8_t error, uint8_t index) {
                                 ClearEpHalt(index);
                                 if(index != epDataInIndex) return UHS_BULK_ERR_WRITE_STALL;
                                 return UHS_BULK_ERR_STALL;
-
 
                         case UHS_HOST_ERROR_TOGERR:
                                 // Handle a very super rare corner case, where toggles become de-synched.
@@ -1171,13 +1157,8 @@ uint8_t UHS_NI UHS_Bulk_Storage::HandleSCSIError(uint8_t status) {
         } // switch
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
-
-
 // Debugging code
-
-
 ////////////////////////////////////////////////////////////////////////////////
 
 /**

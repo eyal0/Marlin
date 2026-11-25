@@ -23,16 +23,14 @@
 
 /**
  * Velleman K8800 (Vertex)
+ * Schematic: https://cdn.velleman.eu/downloads/files/vertex-delta/schematics/K8800-schematic-V1.4.pdf
+ * ATmega2560, ATmega1280
  */
 
-#if NOT_TARGET(__AVR_ATmega1280__, __AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME      "K8800"
 #define DEFAULT_MACHINE_NAME "Vertex Delta"
-
-//#define LCD_SCREEN_ROT_180
 
 //
 // Limit Switches
@@ -75,7 +73,7 @@
 // Heaters / Fans
 //
 #define HEATER_0_PIN                          10
-#define FAN_PIN                                8
+#define FAN0_PIN                               8
 #define CONTROLLER_FAN_PIN                     9
 
 //
@@ -87,7 +85,7 @@
 //
 // SD Card
 //
-#define SDSS                                  25
+#define SD_SS_PIN                             25
 #define SD_DETECT_PIN                         21  // PD0
 
 //
@@ -97,21 +95,19 @@
 
 #if HAS_WIRED_LCD
 
-  #define LCD_SDSS                            53
+  #define LCD_SDSS_PIN                        53
 
   #define DOGLCD_CS                           29
   #define DOGLCD_A0                           27
 
   #define LCD_PINS_RS                         27
-  #define LCD_PINS_ENABLE                     29
+  #define LCD_PINS_EN                         29
   #define LCD_PINS_D4                         37
   #define LCD_PINS_D5                         35
   #define LCD_PINS_D6                         33
   #define LCD_PINS_D7                         31
 
-  #define LCD_CONTRAST_MIN                     0
-  #define LCD_CONTRAST_MAX                   100
-  #define DEFAULT_LCD_CONTRAST                30
+  //#define LCD_SCREEN_ROTATE                180  // 0, 90, 180, 270
 
   #if IS_NEWPANEL
     #define BTN_EN1                           17

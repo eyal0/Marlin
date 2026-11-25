@@ -23,21 +23,49 @@
 #include "../gcode.h"
 #include "../../module/printcounter.h"
 #include "../../lcd/marlinui.h"
+#if ENABLED(HOST_PAUSE_M76)
+  #include "../../feature/host_actions.h"
+#endif
 
 #include "../../MarlinCore.h" // for startOrResumeJob
 
+#if ENABLED(DWIN_LCD_PROUI)
+  #include "../../lcd/dwin/proui/dwin.h"
+#endif
+
 /**
  * M75: Start print timer
+ *
+ * ProUI: If the print fails to start and any text is
+ *        included in the command, print it in the header.
+ *
+ * With REMAINING_TIME_PRIME:
+ *
+ *   'M75 R' : Prime Remaining Time Estimate with the current job time and SD file position and return.
+ *
  */
 void GcodeSuite::M75() {
-  startOrResumeJob();
+  #if ENABLED(REMAINING_TIME_PRIME)
+    if (parser.seen_test('R')) {
+      print_job_timer.primeRemainingTimeEstimate(card.getIndex(), card.getFileSize());
+      return;
+    }
+  #endif
+
+  marlin.startOrResumeJob(); // ... ExtUI::onPrintTimerStarted()
+
+  #if ENABLED(DWIN_LCD_PROUI)
+    // TODO: Remove if M75 <string> is never used
+    if (!card.isStillPrinting()) dwinPrintHeader(parser.has_string() ? parser.string_arg : GET_TEXT(MSG_HOST_START_PRINT));
+  #endif
 }
 
 /**
  * M76: Pause print timer
  */
 void GcodeSuite::M76() {
-  print_job_timer.pause();
+  print_job_timer.pause(); // ... ExtUI::onPrintTimerPaused()
+  TERN_(HOST_PAUSE_M76, hostui.pause());
 }
 
 /**
@@ -49,25 +77,25 @@ void GcodeSuite::M77() {
 
 #if ENABLED(PRINTCOUNTER)
 
-/**
- * M78: Show print statistics
- */
-void GcodeSuite::M78() {
-  if (parser.intval('S') == 78) {  // "M78 S78" will reset the statistics
-    print_job_timer.initStats();
-    ui.reset_status();
-    return;
-  }
-
-  #if HAS_SERVICE_INTERVALS
-    if (parser.seenval('R')) {
-      print_job_timer.resetServiceInterval(parser.value_int());
+  /**
+   * M78: Show print statistics
+   */
+  void GcodeSuite::M78() {
+    if (parser.intval('S') == 78) {  // "M78 S78" will reset the statistics
+      print_job_timer.initStats();
       ui.reset_status();
       return;
     }
-  #endif
 
-  print_job_timer.showStats();
-}
+    #if HAS_SERVICE_INTERVALS
+      if (parser.seenval('R')) {
+        print_job_timer.resetServiceInterval(parser.value_int());
+        ui.reset_status();
+        return;
+      }
+    #endif
+
+    print_job_timer.showStats();
+  }
 
 #endif // PRINTCOUNTER

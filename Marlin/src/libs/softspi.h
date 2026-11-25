@@ -25,11 +25,7 @@
 // Based on https://github.com/niteris/ArduinoSoftSpi
 //
 
-#include "../HAL/shared/Marduino.h"
-
-#ifndef FORCE_INLINE
-  #define FORCE_INLINE inline __attribute__((always_inline))
-#endif
+#include "../HAL/shared/Marduino.h" // CORE_TEENSY
 
 #define nop __asm__ volatile ("nop") // NOP for timing
 
@@ -211,7 +207,16 @@
       {&DDRJ, &PINJ, &PORTJ, 5},  // J5 76
       {&DDRJ, &PINJ, &PORTJ, 6},  // J6 77
       {&DDRE, &PINE, &PORTE, 2},  // E2 78
-      {&DDRE, &PINE, &PORTE, 6}   // E6 79
+      {&DDRE, &PINE, &PORTE, 6},  // E6 79
+
+      // pins_MIGHTYBOARD_REVG.h
+      // TODO: Only include with a -D define in build
+      {&DDRE, &PINE, &PORTE, 7},  // E7 80
+      {&DDRD, &PIND, &PORTD, 4},  // D4 81
+      {&DDRD, &PIND, &PORTD, 5},  // D5 82
+      {&DDRD, &PIND, &PORTD, 6},  // D6 83
+      {&DDRH, &PINH, &PORTH, 2},  // H2 84
+      {&DDRH, &PINH, &PORTH, 7}   // H7 85
     };
 
   #elif defined(__AVR_ATmega1284P__) || defined(__AVR_ATmega1284__) \
@@ -485,9 +490,9 @@
 
   /**
    * Fast write helper
-   * @param[in] address I/O register address
-   * @param[in] bit bit number to write
-   * @param[in] level value for bit
+   * @param[in] address  I/O register address
+   * @param[in] bit      bit number to write
+   * @param[in] level    value for bit
    */
   FORCE_INLINE static void fastBitWriteSafe(volatile uint8_t* address, uint8_t bit, bool level) {
     uint8_t oldSREG;
@@ -715,7 +720,7 @@ class SoftSPI {
 
   FORCE_INLINE bool MODE_CPHA(uint8_t mode) { return bool(mode & 1); }
   FORCE_INLINE bool MODE_CPOL(uint8_t mode) { return bool(mode & 2); }
-  FORCE_INLINE void receiveBit(uint8_t bit, uint8_t* data) {
+  FORCE_INLINE void receiveBit(uint8_t bit, uint8_t *data) {
     if (MODE_CPHA(Mode)) fastDigitalWrite(SckPin, !MODE_CPOL(Mode));
     nop;
     nop;
@@ -734,7 +739,7 @@ class SoftSPI {
     if (!MODE_CPHA(Mode)) fastDigitalWrite(SckPin, MODE_CPOL(Mode));
   }
 
-  FORCE_INLINE void transferBit(uint8_t bit, uint8_t* rxData, uint8_t txData) {
+  FORCE_INLINE void transferBit(uint8_t bit, uint8_t *rxData, uint8_t txData) {
     if (MODE_CPHA(Mode)) fastDigitalWrite(SckPin, !MODE_CPOL(Mode));
     fastDigitalWrite(MosiPin, txData & _BV(bit));
     fastDigitalWrite(SckPin,

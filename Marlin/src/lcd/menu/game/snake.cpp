@@ -28,13 +28,13 @@
 
 #define SNAKE_BOX 4
 
-#define HEADER_H  (MENU_FONT_ASCENT - 2)
+#define HEADER_H  (GAME_FONT_ASCENT - 2)
 #define SNAKE_WH  (SNAKE_BOX + 1)
 
 #define IDEAL_L   2
-#define IDEAL_R   (LCD_PIXEL_WIDTH - 1 - 2)
+#define IDEAL_R   (GAME_WIDTH - 1 - 2)
 #define IDEAL_T   (HEADER_H + 2)
-#define IDEAL_B   (LCD_PIXEL_HEIGHT - 1 - 2)
+#define IDEAL_B   (GAME_HEIGHT - 1 - 2)
 #define IDEAL_W   (IDEAL_R - (IDEAL_L) + 1)
 #define IDEAL_H   (IDEAL_B - (IDEAL_T) + 1)
 
@@ -43,9 +43,9 @@
 
 #define BOARD_W   ((SNAKE_WH) * (GAME_W) + 1)
 #define BOARD_H   ((SNAKE_WH) * (GAME_H) + 1)
-#define BOARD_L   ((LCD_PIXEL_WIDTH - (BOARD_W) + 1) / 2)
+#define BOARD_L   ((GAME_WIDTH - (BOARD_W) + 1) / 2)
 #define BOARD_R   (BOARD_L + BOARD_W - 1)
-#define BOARD_T   (((LCD_PIXEL_HEIGHT + IDEAL_T) - (BOARD_H)) / 2)
+#define BOARD_T   (((GAME_HEIGHT + IDEAL_T) - (BOARD_H)) / 2)
 #define BOARD_B   (BOARD_T + BOARD_H - 1)
 
 #define GAMEX(X)  (BOARD_L + ((X) * (SNAKE_WH)))
@@ -63,7 +63,7 @@
   #define SNAKE_SIZ SNAKE_BOX
 #endif
 
-constexpr fixed_t snakev = FTOP(0.20);
+constexpr fixed_t snakev = FTOF(0.20);
 
 snake_data_t &sdat = marlin_game_data.snake;
 
@@ -84,14 +84,14 @@ void shorten_tail() {
   }
   if (shift) {
     sdat.head_ind--;
-    LOOP_LE_N(i, sdat.head_ind)
+    for (uint8_t i = 0; i <= sdat.head_ind; ++i)
       sdat.snake_tail[i] = sdat.snake_tail[i + 1];
   }
 }
 
 // The food is on a line
 inline bool food_on_line() {
-  LOOP_L_N(n, sdat.head_ind) {
+  for (uint8_t n = 0; n < sdat.head_ind; ++n) {
     pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
     if (p.x == q.x) {
       if ((sdat.foodx == p.x - 1 || sdat.foodx == p.x) && WITHIN(sdat.foody, _MIN(p.y, q.y), _MAX(p.y, q.y)))
@@ -125,7 +125,7 @@ void snake_reset() {
   // Init the head and velocity
   sdat.snakex = BTOF(1);
   sdat.snakey = BTOF(GAME_H / 2);
-  //snakev = FTOP(0.25);
+  //snakev = FTOF(0.25);
 
   // Init the tail with a cw turn
   sdat.snake_dir = 0;
@@ -151,7 +151,7 @@ bool snake_overlap() {
   // VERTICAL head segment?
   if (h1.x == h2.x) {
     // Loop from oldest to segment two away from head
-    LOOP_L_N(n, sdat.head_ind - 2) {
+    for (uint8_t n = 0; n < sdat.head_ind - 2; ++n) {
       // Segment p to q
       const pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
       if (p.x != q.x) {
@@ -163,7 +163,7 @@ bool snake_overlap() {
   }
   else {
     // Loop from oldest to segment two away from head
-    LOOP_L_N(n, sdat.head_ind - 2) {
+    for (uint8_t n = 0; n < sdat.head_ind - 2; ++n) {
       // Segment p to q
       const pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
       if (p.y != q.y) {
@@ -228,46 +228,41 @@ void SnakeGame::game_screen() {
 
   } while(0);
 
-  u8g.setColorIndex(1);
+  frame_start();
 
-  // Draw Score
-  if (PAGE_UNDER(HEADER_H)) lcd_put_int(0, HEADER_H - 1, score);
-
-  // DRAW THE PLAYFIELD BORDER
-  u8g.drawFrame(BOARD_L - 2, BOARD_T - 2, BOARD_R - BOARD_L + 4, BOARD_B - BOARD_T + 4);
-
-  // Draw the snake (tail)
+  // Draw the snake (tail) in green
+  TERN_(IS_DWIN_MARLINUI, set_color(color::GREEN));
   #if SNAKE_WH < 2
 
     // At this scale just draw a line
-    LOOP_L_N(n, sdat.head_ind) {
+    for (uint8_t n = 0; n < sdat.head_ind; ++n) {
       const pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
       if (p.x == q.x) {
         const int8_t y1 = GAMEY(_MIN(p.y, q.y)), y2 = GAMEY(_MAX(p.y, q.y));
         if (PAGE_CONTAINS(y1, y2))
-          u8g.drawVLine(GAMEX(p.x), y1, y2 - y1 + 1);
+          draw_vline(GAMEX(p.x), y1, y2 - y1 + 1);
       }
       else if (PAGE_CONTAINS(GAMEY(p.y), GAMEY(p.y))) {
         const int8_t x1 = GAMEX(_MIN(p.x, q.x)), x2 = GAMEX(_MAX(p.x, q.x));
-        u8g.drawHLine(x1, GAMEY(p.y), x2 - x1 + 1);
+        draw_hline(x1, GAMEY(p.y), x2 - x1 + 1);
       }
     }
 
   #elif SNAKE_WH == 2
 
     // At this scale draw two lines
-    LOOP_L_N(n, sdat.head_ind) {
+    for (uint8_t n = 0; n < sdat.head_ind; ++n) {
       const pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
       if (p.x == q.x) {
         const int8_t y1 = GAMEY(_MIN(p.y, q.y)), y2 = GAMEY(_MAX(p.y, q.y));
         if (PAGE_CONTAINS(y1, y2 + 1))
-          u8g.drawFrame(GAMEX(p.x), y1, 2, y2 - y1 + 1 + 1);
+          draw_frame(GAMEX(p.x), y1, 2, y2 - y1 + 1 + 1);
       }
       else {
         const int8_t py = GAMEY(p.y);
         if (PAGE_CONTAINS(py, py + 1)) {
           const int8_t x1 = GAMEX(_MIN(p.x, q.x)), x2 = GAMEX(_MAX(p.x, q.x));
-          u8g.drawFrame(x1, py, x2 - x1 + 1 + 1, 2);
+          draw_frame(x1, py, x2 - x1 + 1 + 1, 2);
         }
       }
     }
@@ -275,7 +270,7 @@ void SnakeGame::game_screen() {
   #else
 
     // Draw a series of boxes
-    LOOP_L_N(n, sdat.head_ind) {
+    for (uint8_t n = 0; n < sdat.head_ind; ++n) {
       const pos_t &p = sdat.snake_tail[n], &q = sdat.snake_tail[n + 1];
       if (p.x == q.x) {
         const int8_t y1 = _MIN(p.y, q.y), y2 = _MAX(p.y, q.y);
@@ -283,7 +278,7 @@ void SnakeGame::game_screen() {
           for (int8_t i = y1; i <= y2; ++i) {
             const int8_t y = GAMEY(i);
             if (PAGE_CONTAINS(y, y + SNAKE_SIZ - 1))
-              u8g.drawBox(GAMEX(p.x), y, SNAKE_SIZ, SNAKE_SIZ);
+              draw_box(GAMEX(p.x), y, SNAKE_SIZ, SNAKE_SIZ);
           }
         }
       }
@@ -292,26 +287,36 @@ void SnakeGame::game_screen() {
         if (PAGE_CONTAINS(py, py + SNAKE_SIZ - 1)) {
           const int8_t x1 = _MIN(p.x, q.x), x2 = _MAX(p.x, q.x);
           for (int8_t i = x1; i <= x2; ++i)
-            u8g.drawBox(GAMEX(i), py, SNAKE_SIZ, SNAKE_SIZ);
+            draw_box(GAMEX(i), py, SNAKE_SIZ, SNAKE_SIZ);
         }
       }
     }
 
   #endif
 
-  // Draw food
+  // Draw food in red
+  TERN_(IS_DWIN_MARLINUI, set_color(color::RED));
   const int8_t fy = GAMEY(sdat.foody);
   if (PAGE_CONTAINS(fy, fy + FOOD_WH - 1)) {
     const int8_t fx = GAMEX(sdat.foodx);
-    u8g.drawFrame(fx, fy, FOOD_WH, FOOD_WH);
-    if (FOOD_WH == 5) u8g.drawPixel(fx + 2, fy + 2);
+    draw_frame(fx, fy, FOOD_WH, FOOD_WH);
+    if (FOOD_WH == 5) draw_pixel(fx + 2, fy + 2);
   }
+
+  // Draw the playfield border
+  TERN_(IS_DWIN_MARLINUI, set_color(color::WHITE));
+  draw_frame(BOARD_L - 2, BOARD_T - 2, BOARD_R - BOARD_L + 4, BOARD_B - BOARD_T + 4);
+
+  // Draw Score
+  if (PAGE_UNDER(HEADER_H)) draw_int(0, HEADER_H - 1, score);
 
   // Draw GAME OVER
   if (!game_state) draw_game_over();
 
   // A click always exits this game
   if (ui.use_click()) exit_game();
+
+  frame_end();
 }
 
 void SnakeGame::enter_game() {

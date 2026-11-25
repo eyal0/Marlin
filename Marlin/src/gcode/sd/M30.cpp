@@ -22,13 +22,16 @@
 
 #include "../../inc/MarlinConfig.h"
 
-#if ENABLED(SDSUPPORT)
+#if HAS_MEDIA
 
 #include "../gcode.h"
 #include "../../sd/cardreader.h"
 
 /**
- * M30 <filename>: Delete SD Card file
+ * M30: Delete Media File
+ *
+ * Parameters:
+ *   <filename>  The filename of the file to delete
  */
 void GcodeSuite::M30() {
   if (card.isMounted()) {
@@ -37,4 +40,4 @@ void GcodeSuite::M30() {
   }
 }
 
-#endif // SDSUPPORT
+#endif // HAS_MEDIA

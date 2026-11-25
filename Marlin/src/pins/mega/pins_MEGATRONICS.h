@@ -23,11 +23,11 @@
 
 /**
  * MegaTronics pin assignments
+ * Schematic: https://reprap.org/mediawiki/images/a/a3/Megatronics_1_0_sch.pdf
+ * ATmega2560
  */
 
-#if NOT_TARGET(__AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Megatronics"
 //
@@ -73,7 +73,7 @@
 //
 // Temperature Sensors
 //
-#if TEMP_SENSOR_0 == -1
+#if TEMP_SENSOR_0_IS_AD595
   #define TEMP_0_PIN                           8  // Analog Input
 #else
   #define TEMP_0_PIN                          13  // Analog Input
@@ -88,14 +88,14 @@
 #define HEATER_1_PIN                           8
 #define HEATER_BED_PIN                        10
 
-#ifndef FAN_PIN
-  #define FAN_PIN                              7  // IO pin. Buffer needed
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             7  // IO pin. Buffer needed
 #endif
 
 //
 // Misc. Functions
 //
-#define SDSS                                  53
+#define SD_SS_PIN                             53
 #define LED_PIN                               13
 #define PS_ON_PIN                             12
 
@@ -108,10 +108,10 @@
 //
 #define BEEPER_PIN                            33
 
-#if IS_ULTRA_LCD && IS_NEWPANEL
+#if HAS_WIRED_LCD && IS_NEWPANEL
 
   #define LCD_PINS_RS                         16
-  #define LCD_PINS_ENABLE                     17
+  #define LCD_PINS_EN                         17
   #define LCD_PINS_D4                         23
   #define LCD_PINS_D5                         25
   #define LCD_PINS_D6                         27
@@ -124,11 +124,13 @@
 
   #define SD_DETECT_PIN                       -1  // RAMPS doesn't use this
 
-#endif // IS_ULTRA_LCD && IS_NEWPANEL
+#endif // HAS_WIRED_LCD && IS_NEWPANEL
 
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#define SPINDLE_LASER_PWM_PIN                  3  // Hardware PWM
-#define SPINDLE_LASER_ENA_PIN                  4  // Pullup!
-#define SPINDLE_DIR_PIN                       11
+#if HAS_CUTTER
+  #define SPINDLE_LASER_PWM_PIN                3  // Hardware PWM
+  #define SPINDLE_LASER_ENA_PIN                4  // Pullup!
+  #define SPINDLE_DIR_PIN                     11
+#endif

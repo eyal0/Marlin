@@ -27,7 +27,6 @@ e-mail   :  support@circuitsathome.com
 #include "UHS_max3421e.h"
 #include <SPI.h>
 
-
 #ifndef SPI_HAS_TRANSACTION
 #error "Your SPI library installation is too old."
 #else
@@ -57,8 +56,6 @@ e-mail   :  support@circuitsathome.com
 #else
 #define USB_HOST_SHIELD_USE_ISR 1
 #endif
-
-
 
 #if !USB_HOST_SHIELD_USE_ISR
 #error NOISR Polled mode _NOT SUPPORTED YET_
@@ -180,8 +177,6 @@ e-mail   :  support@circuitsathome.com
 #endif
 #endif
 
-
-
 #ifdef NO_AUTO_SPEED
 // Ugly details section...
 // MAX3421E characteristics
@@ -272,11 +267,11 @@ e-mail   :  support@circuitsathome.com
 //
 #define IRQ_SENSE FALLING
 #ifdef ARDUINO_ARCH_PIC32
-//#define bmPULSEWIDTH PUSLEWIDTH10_6
+//#define bmPULSEWIDTH PULSEWIDTH10_6
 #define bmPULSEWIDTH 0
 #define bmIRQ_SENSE 0
 #else
-#define bmPULSEWIDTH PUSLEWIDTH1_3
+#define bmPULSEWIDTH PULSEWIDTH1_3
 #define bmIRQ_SENSE 0
 #endif
 #else
@@ -388,7 +383,7 @@ public:
                 return (!condet);
         };
 
-        virtual UHS_EpInfo *ctrlReqOpen(uint8_t addr, uint64_t Request, uint8_t* dataptr);
+        virtual UHS_EpInfo *ctrlReqOpen(uint8_t addr, uint64_t Request, uint8_t *dataptr);
 
         virtual void UHS_NI vbusPower(VBUS_t state) {
                 regWr(rPINCTL, (bmFDUPSPI | bmIRQ_SENSE) | (uint8_t)(state));
@@ -466,7 +461,6 @@ public:
                 interrupts();
         };
 
-
         int16_t UHS_NI Init(int16_t mseconds);
 
         int16_t UHS_NI Init() {
@@ -483,8 +477,8 @@ public:
         void gpioWr(uint8_t data);
         uint8_t regRd(uint8_t reg);
         uint8_t gpioRd();
-        uint8_t* bytesWr(uint8_t reg, uint8_t nbytes, uint8_t* data_p);
-        uint8_t* bytesRd(uint8_t reg, uint8_t nbytes, uint8_t* data_p);
+        uint8_t* bytesWr(uint8_t reg, uint8_t nbytes, uint8_t *data_p);
+        uint8_t* bytesRd(uint8_t reg, uint8_t nbytes, uint8_t *data_p);
 
         // ARM/NVIC specific, used to emulate reentrant ISR.
 #ifdef SWI_IRQ_NUM

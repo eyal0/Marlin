@@ -41,17 +41,17 @@ void GcodeSuite::M486() {
 
   if (parser.seen('T')) {
     cancelable.reset();
-    cancelable.object_count = parser.intval('T', 1);
+    cancelable.state.object_count = parser.intval('T', 1);
   }
 
-  if (parser.seen('S'))
+  if (parser.seenval('S'))
     cancelable.set_active_object(parser.value_int());
 
-  if (parser.seen('C')) cancelable.cancel_active_object();
+  if (parser.seen_test('C')) cancelable.cancel_active_object();
 
-  if (parser.seen('P')) cancelable.cancel_object(parser.value_int());
+  if (parser.seenval('P')) cancelable.cancel_object(parser.value_int());
 
-  if (parser.seen('U')) cancelable.uncancel_object(parser.value_int());
+  if (parser.seenval('U')) cancelable.uncancel_object(parser.value_int());
 }
 
 #endif // CANCEL_OBJECTS

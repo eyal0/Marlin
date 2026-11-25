@@ -22,70 +22,76 @@
 #pragma once
 
 #include "../../inc/MarlinConfigPre.h"
+#include "../tft_io/touch_calibration.h"
 
-#include "tft_color.h"
-#include "tft_image.h"
-
-#if ENABLED(TOUCH_SCREEN_CALIBRATION)
-  #include "../tft_io/touch_calibration.h"
+#if ENABLED(TFT_TOUCH_DEVICE_GT911)
+  #include HAL_PATH(../.., tft/gt911.h)
+  #define TOUCH_DRIVER_CLASS GT911
+#elif ENABLED(TFT_TOUCH_DEVICE_XPT2046)
+  #include HAL_PATH(../.., tft/xpt2046.h)
+  #define TOUCH_DRIVER_CLASS XPT2046
+#else
+  #error "Unknown Touch Screen Type."
 #endif
-
-#include HAL_PATH(../../HAL, tft/xpt2046.h)
-#define TOUCH_DRIVER XPT2046
-
-// Menu Navigation
-extern int8_t encoderTopLine, encoderLine, screen_items;
 
 enum TouchControlType : uint16_t {
   NONE = 0x0000,
   CALIBRATE,
-  MENU_SCREEN,
-  MENU_ITEM,
+  MENU_SCREEN, MENU_ITEM,
   BACK,
-  PAGE_UP,
-  PAGE_DOWN,
-  CLICK,
-  MENU_CLICK,
+  PAGE_UP, PAGE_DOWN,
+  CLICK, MENU_CLICK,
   RESUME_CONTINUE,
   SLIDER,
-  INCREASE,
-  DECREASE,
-  CANCEL,
-  CONFIRM,
-  HEATER,
-  FAN,
-  FEEDRATE,
-  FLOWRATE,
+  INCREASE, DECREASE,
+  CANCEL_ITEM, CONFIRM,  // NB: not CANCEL - ESP-IDF rom/ets_sys.h has a global enum with that name
+  HEATER, FAN,
+  FEEDRATE, FLOWRATE,
   UBL,
-  MOVE_AXIS,
+  STOP,
   BUTTON,
+  CALLBACK,
+  GX_ACTION,    // NOVIN3DP galaxy UI action (data = action code, bit 15 = auto-repeat)
+  GX_SLIDER     // NOVIN3DP galaxy UI slider (data = slider id), follows the finger while held
 };
-
-typedef void (*screenFunc_t)();
-
-void add_control(uint16_t x, uint16_t y, TouchControlType control_type, intptr_t data, MarlinImage image, bool is_enabled = true, uint16_t color_enabled = COLOR_CONTROL_ENABLED, uint16_t color_disabled = COLOR_CONTROL_DISABLED);
-inline void add_control(uint16_t x, uint16_t y, TouchControlType control_type, MarlinImage image, bool is_enabled = true, uint16_t color_enabled = COLOR_CONTROL_ENABLED, uint16_t color_disabled = COLOR_CONTROL_DISABLED) { add_control(x, y, control_type, 0, image, is_enabled, color_enabled, color_disabled); }
-inline void add_control(uint16_t x, uint16_t y, screenFunc_t screen, MarlinImage image, bool is_enabled = true, uint16_t color_enabled = COLOR_CONTROL_ENABLED, uint16_t color_disabled = COLOR_CONTROL_DISABLED) { add_control(x, y, MENU_SCREEN, (intptr_t)screen, image, is_enabled, color_enabled, color_disabled); }
 
 typedef struct __attribute__((__packed__)) {
   TouchControlType type;
-  uint16_t x;
-  uint16_t y;
-  uint16_t width;
-  uint16_t height;
+  uint16_t x, y;
+  uint16_t width, height;
   intptr_t data;
+  int32_t index;
 } touch_control_t;
 
-#define MAX_CONTROLS        16
-#define MINIMUM_HOLD_TIME   15
-#define TOUCH_REPEAT_DELAY  75
-#define MIN_REPEAT_DELAY    25
-#define UBL_REPEAT_DELAY    125
-#define FREE_MOVE_RANGE     32
+typedef struct {
+  uint16_t x, y;
+  int32_t index;
+} touch_event_t;
+
+typedef void (*touch_handler_t)(touch_event_t*);
+
+// Tall displays show the edit screen keypad together with the slider, steps and buttons.
+// Controls beyond this limit are ignored, so it must cover the busiest screen.
+#if ENABLED(NOVIN3DP_GALAXY_UI)
+  #define MAX_CONTROLS             52   // G-code keyboard: 44 keys + 4 buttons + header
+#elif TFT_HEIGHT >= 480
+  #define MAX_CONTROLS             32
+#else
+  #define MAX_CONTROLS             16
+#endif
+#define MINIMUM_HOLD_TIME          15   // Debounce delay for ignoring short accidental touch
+#define TOUCH_REPEAT_PRE_DELAY   1000   // 1s Wait before a held control starts repeating
+#define TOUCH_REPEAT_DELAY        250   // 1/4s Interval between repeats once repeating starts
+#define MIN_REPEAT_DELAY           25   // Smallest permitted repeat delay for controls that speed up the longer they are held
+#define FAST_REPEAT_DECREMENT       5   // Repeat delay may decrease for a control as it is held
+#define UBL_REPEAT_DELAY          125   // Repeat delay for a held control
+#define FREE_MOVE_RANGE            32   // Area around a control allowed before aborting a held control
+
+#define TSLP_SLEEPING 1
 
 class Touch {
   private:
-    static TOUCH_DRIVER io;
+    static TOUCH_DRIVER_CLASS io;
     static int16_t x, y;
     static bool enabled;
 
@@ -93,16 +99,22 @@ class Touch {
     static touch_control_t *current_control;
     static uint16_t controls_count;
 
-    static millis_t last_touch_ms, time_to_hold, repeat_delay, touch_time;
+    static millis_t next_touch_ms, time_to_hold, repeat_delay, nada_start_ms;
+    static bool repeat_started;   // Pre-repeat delay elapsed, now repeating at the shorter interval
     static TouchControlType touch_control_type;
 
-    static inline bool get_point(int16_t *x, int16_t *y);
-    static void touch(touch_control_t *control);
-    static void hold(touch_control_t *control, millis_t delay = 0);
+    static bool get_point(int16_t * const x, int16_t * const y);
+
+    // Touch first detected in a control
+    static void touch(touch_control_t * const control);
+
+    // Set the control as "held" until the touch is released
+    static void hold(touch_control_t * const control, const millis_t delay=0, const bool accelerate=false);
 
   public:
+    static touch_event_t touch_event;
     static void init();
-    static void reset() { controls_count = 0; touch_time = 0; current_control = NULL; }
+    static void reset() { controls_count = 0; nada_start_ms = 0; current_control = nullptr; }
     static void clear() { controls_count = 0; }
     static void idle();
     static bool is_clicked() {
@@ -114,8 +126,21 @@ class Touch {
     }
     static void disable() { enabled = false; }
     static void enable() { enabled = true; }
+    #if HAS_DISPLAY_SLEEP
+      static millis_t next_sleep_ms;
+      static bool isSleeping() { return next_sleep_ms == TSLP_SLEEPING; }
+      static void sleepTimeout();
+      static void wakeUp();
+    #endif
+    static void add_control(TouchControlType type, uint16_t x, uint16_t y, uint16_t width, uint16_t height, intptr_t data=0, int32_t index=0);
+    static void add_control(TouchControlType type, uint16_t x, uint16_t y, uint16_t width, uint16_t height, void (*handler)()) {
+      add_control(type, x, y, width, height, intptr_t(handler));
+    }
 
-    static void add_control(TouchControlType type, uint16_t x, uint16_t y, uint16_t width, uint16_t height, intptr_t data = 0);
+    #if defined(__PLAT_NATIVE_SIM__) && HAS_SPI_TFT
+      #define HAS_SIM_TOUCH_RECTS 1
+      static void sim_touch_rects();
+    #endif
 };
 
 extern Touch touch;

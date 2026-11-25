@@ -13,7 +13,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
-
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -21,7 +21,6 @@
 
 #ifndef DYN_SWI_H
 #define DYN_SWI_H
-
 
 #if defined(__arm__) || defined(ARDUINO_ARCH_PIC32)
 #ifdef ARDUINO_ARCH_PIC32
@@ -80,7 +79,7 @@ extern "C"
 #define NVIC_GET_PENDING(n) NVIC_GetPendingIRQ((IRQn_Type)n)
 #define NVIC_SET_PENDING(n) NVIC_SetPendingIRQ((IRQn_Type)n)
 #define NVIC_ENABLE_IRQ(n) NVIC_EnableIRQ((IRQn_Type)n)
-#define NVIC_SET_PRIORITY(n ,p) NVIC_SetPriority((IRQn_Type)n, (uint32_t) p)
+#define NVIC_SET_PRIORITY(n, p) NVIC_SetPriority((IRQn_Type)n, (uint32_t) p)
 //extern "C" {
 //        extern uint32_t _VectorsRam[VECTORTABLE_SIZE] __attribute__((aligned(VECTORTABLE_ALIGNMENT)));
 //}
@@ -134,7 +133,6 @@ extern "C"
 #else // Not CMSIS or PJRC CORE_TEENSY or PIC32 or SPRESENSE
 #error Do not know how to relocate IRQ vectors or perform SWI
 #endif // SWI_IRQ_NUM
-
 
 #ifndef SWI_IRQ_NUM
 #error SWI_IRQ_NUM not defined

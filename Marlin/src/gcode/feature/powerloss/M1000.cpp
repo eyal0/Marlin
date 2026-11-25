@@ -27,9 +27,18 @@
 #include "../../gcode.h"
 #include "../../../feature/powerloss.h"
 #include "../../../module/motion.h"
+
+#if HAS_PLR_BED_THRESHOLD
+  #include "../../../module/temperature.h"  // for degBed
+#endif
+
 #include "../../../lcd/marlinui.h"
 #if ENABLED(EXTENSIBLE_UI)
   #include "../../../lcd/extui/ui_api.h"
+#elif ENABLED(DWIN_CREALITY_LCD)
+  #include "../../../lcd/dwin/creality/dwin.h"
+#elif ENABLED(DWIN_CREALITY_LCD_JYERSUI)
+  #include "../../../lcd/dwin/jyersui/dwin.h" // Temporary fix until it can be better implemented
 #endif
 
 #define DEBUG_OUT ENABLED(DEBUG_POWER_LOSS_RECOVERY)
@@ -37,41 +46,52 @@
 
 void menu_job_recovery();
 
-inline void plr_error(PGM_P const prefix) {
+inline void plr_error(FSTR_P const prefix) {
   #if ENABLED(DEBUG_POWER_LOSS_RECOVERY)
     DEBUG_ECHO_START();
-    serialprintPGM(prefix);
-    DEBUG_ECHOLNPGM(" Job Recovery Data");
+    DEBUG_ECHOLN(prefix, F(" Job Recovery Data"));
   #else
     UNUSED(prefix);
   #endif
 }
 
-#if HAS_LCD_MENU
+#if HAS_MARLINUI_MENU
   void lcd_power_loss_recovery_cancel();
 #endif
 
 /**
  * M1000: Resume from power-loss (undocumented)
  *   - With 'S' go to the Resume/Cancel menu
+ *     ...unless the bed temperature is already above a configured minimum temperature.
+ *   - With 'C' execute a cancel selection
  *   - With no parameters, run recovery commands
  */
 void GcodeSuite::M1000() {
 
   if (recovery.valid()) {
-    if (parser.seen('S')) {
-      #if HAS_LCD_MENU
+    const bool force_resume = TERN0(HAS_PLR_BED_THRESHOLD, recovery.bed_temp_threshold && (thermalManager.degBed() >= recovery.bed_temp_threshold));
+
+    if (!force_resume && parser.seen_test('S')) {
+
+      // Not every ExtUI display can prompt, so also tell the host how to respond
+      TERN_(EXTENSIBLE_UI, SERIAL_ECHO_MSG("Power-loss recovery: M1000 to resume, M1000 C to cancel."));
+
+      TERN_(PLR_HEAT_BED_ON_REBOOT, recovery.set_bed_temp(true));
+
+      #if HAS_MARLINUI_MENU
         ui.goto_screen(menu_job_recovery);
-      #elif ENABLED(DWIN_CREALITY_LCD)
-        recovery.dwin_flag = true;
       #elif ENABLED(EXTENSIBLE_UI)
         ExtUI::onPowerLossResume();
+      #elif HAS_PLR_UI_FLAG
+        recovery.ui_flag_resume = true;
+      #elif ENABLED(DWIN_CREALITY_LCD_JYERSUI) // Temporary fix until it can be better implemented
+        jyersDWIN.popupHandler(Popup_Resume);
       #else
         SERIAL_ECHO_MSG("Resume requires LCD.");
       #endif
     }
-    else if (parser.seen('C')) {
-      #if HAS_LCD_MENU
+    else if (parser.seen_test('C')) {
+      #if HAS_MARLINUI_MENU
         lcd_power_loss_recovery_cancel();
       #else
         recovery.cancel();
@@ -82,7 +102,7 @@ void GcodeSuite::M1000() {
       recovery.resume();
   }
   else
-    plr_error(recovery.info.valid_head ? PSTR("No") : PSTR("Invalid"));
+    plr_error(recovery.info.valid_head ? F("No") : F("Invalid"));
 
 }
 

@@ -25,6 +25,11 @@
  *  Rev B  2 JUN 2017
  *
  *  Converted to Arduino pin numbering
+ *
+ *  Schematic (RevA): https://raw.githubusercontent.com/lwalkera/printrboard/revA/Printrboard.sch
+ *  Schematic (RevB): https://raw.githubusercontent.com/lwalkera/printrboard/revB/Printrboard.sch
+ *  Schematic (RevC): https://raw.githubusercontent.com/lwalkera/printrboard/revC/Printrboard.sch
+ *  Schematic (RevD): https://raw.githubusercontent.com/lwalkera/printrboard/RevD/Printrboard.sch
  */
 
 /**
@@ -62,9 +67,7 @@
  *   4. The programmer is no longer needed. Remove it.
  */
 
-#if NOT_TARGET(__AVR_AT90USB1286__)
-  #error "Oops! Select 'Teensy++ 2.0' or 'Printrboard' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Printrboard"
 
@@ -111,23 +114,23 @@
 #define HEATER_2_PIN                          45  // F7
 #define HEATER_BED_PIN                        14  // C4 PWM3C
 
-#ifndef FAN_PIN
-  #define FAN_PIN                             16  // C6 PWM3A
+#ifndef FAN0_PIN
+  #define FAN0_PIN                            16  // C6 PWM3A
 #endif
 
 //
 // Misc. Functions
 //
-#define SDSS                                  26  // B6 SDCS
 #define FILWIDTH_PIN                           2  // Analog Input
 
 //
 // LCD / Controller
 //
-#if IS_ULTRA_LCD && IS_NEWPANEL
+
+#if HAS_WIRED_LCD && IS_NEWPANEL
 
   #define LCD_PINS_RS                          9  // E1       JP11-11
-  #define LCD_PINS_ENABLE                      8  // E0       JP11-10
+  #define LCD_PINS_EN                          8  // E0       JP11-10
   #define LCD_PINS_D4                          7  // D7       JP11-8
   #define LCD_PINS_D5                          6  // D6       JP11-7
   #define LCD_PINS_D6                          5  // D5       JP11-6
@@ -138,25 +141,26 @@
 
     #define DOGLCD_A0                         40  // F2       JP2-2
     #define DOGLCD_CS                         41  // F3       JP2-4
-    #define LCD_SCREEN_ROT_180
 
     #define BTN_EN1                            2  // D2 TX1   JP2-5
     #define BTN_EN2                            3  // D3 RX1   JP2-7
     #define BTN_ENC                           45  // F7 TDI   JP2-12
 
-    #undef SDSS
-    #define SDSS                              43  // F5 TMS   JP2-8
+    #define SD_SS_PIN                         43  // F5 TMS   JP2-8
 
     #define STAT_LED_RED_PIN                  12  // C2    JP11-14
     #define STAT_LED_BLUE_PIN                 10  // C0    JP11-12
+
+    #define LCD_SCREEN_ROTATE                180  // 0, 90, 180, 270
 
   #elif ENABLED(LCD_I2C_PANELOLU2)
 
     #define BTN_EN1                            3  // D3 RX1   JP2-7
     #define BTN_EN2                            2  // D2 TX1   JP2-5
     #define BTN_ENC                           41  // F3       JP2-4
-    #undef SDSS
-    #define SDSS                              38  // F0       B-THERM connector - use SD card on Panelolu2
+
+    #define SD_SS_PIN                         38  // F0       B-THERM connector - use SD card on Panelolu2
+    #undef LCD_PINS_EN                            // not used, causes false pin conflict report
 
   #else
 
@@ -166,4 +170,8 @@
 
   #endif
 
-#endif // IS_ULTRA_LCD && IS_NEWPANEL
+#endif // HAS_WIRED_LCD && IS_NEWPANEL
+
+#ifndef SDSS
+  #define SD_SS_PIN                           26  // B6 SDCS
+#endif

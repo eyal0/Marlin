@@ -2,6 +2,9 @@
  * Marlin 3D Printer Firmware
  * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
  *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
@@ -24,41 +27,88 @@
   #include "../../feature/e_parser.h"
 #endif
 
-typedef void (*usart_rx_callback_t)(serial_t * obj);
+#if ENABLED(SERIAL_DMA)
+  #include "HardwareSerial.h"
+#endif
 
-class MarlinSerial : public HardwareSerial {
-public:
-  MarlinSerial(void* peripheral, usart_rx_callback_t rx_callback) :
-      HardwareSerial(peripheral), _rx_callback(rx_callback)
-      #if ENABLED(EMERGENCY_PARSER)
-        , emergency_state(EmergencyParser::State::EP_RESET)
-      #endif
-  { }
+#include "../../core/serial_hook.h"
 
-  #if ENABLED(EMERGENCY_PARSER)
-    static inline bool emergency_parser_enabled() { return true; }
-  #endif
+#ifdef USBCON
+  #include <USBSerial.h>
+  typedef ForwardSerial1Class< decltype(SerialUSB) > DefaultSerial1;
+  extern DefaultSerial1 MSerialUSB;
+  #define USB_SERIAL_PORT(...) MSerialUSB
+#endif
 
-  void begin(unsigned long baud, uint8_t config);
-  inline void begin(unsigned long baud) { begin(baud, SERIAL_8N1); }
+#define SERIAL_INDEX_MIN 1
+#define SERIAL_INDEX_MAX 9
+#include "../shared/serial_ports.h"
 
-  void _rx_complete_irq(serial_t* obj);
+#if defined(LCD_SERIAL_PORT) && ANY(HAS_DGUS_LCD, EXTENSIBLE_UI)
+  #define LCD_SERIAL_TX_BUFFER_FREE() LCD_SERIAL.availableForWrite()
+#endif
 
-protected:
-  usart_rx_callback_t _rx_callback;
-  #if ENABLED(EMERGENCY_PARSER)
-    EmergencyParser::State emergency_state;
-  #endif
-};
+#if ENABLED(SERIAL_DMA)
 
-extern MarlinSerial MSerial1;
-extern MarlinSerial MSerial2;
-extern MarlinSerial MSerial3;
-extern MarlinSerial MSerial4;
-extern MarlinSerial MSerial5;
-extern MarlinSerial MSerial6;
-extern MarlinSerial MSerial7;
-extern MarlinSerial MSerial8;
-extern MarlinSerial MSerial9;
-extern MarlinSerial MSerial10;
-extern MarlinSerial MSerialLP1;
+  struct MarlinSerial : public HAL_HardwareSerial {
+    MarlinSerial(void *peripheral) : HAL_HardwareSerial(peripheral) { }
+    void begin(unsigned long baud, uint8_t config);
+    inline void begin(unsigned long baud) { begin(baud, SERIAL_8N1); }
+  };
+
+#else // Arduino non-DMA
+
+  /**
+   * The core's HardwareSerial::write() queues the data, then starts the UART if it is idle.
+   * An interrupt between those steps (e.g., the stepper ISR) can delay the main loop until
+   * the UART has sent the data and gone idle, and write() then sends it again from an empty
+   * queue, corrupting the output. To start the UART the core also masks the UART interrupt,
+   * and an interrupt at that point leaves reception off until it returns, losing characters.
+   * Seen in all core versions up to 3.1.0. Limit this by STM32_CORE_VERSION when one is fixed.
+   */
+  #define STM32_ATOMIC_SERIAL_WRITE 1
+
+  typedef void (*usart_rx_callback_t)(serial_t * obj);
+
+  struct MarlinSerial : public HardwareSerial {
+    MarlinSerial(void *peripheral, usart_rx_callback_t rx_callback)
+      : HardwareSerial(peripheral), _rx_callback(rx_callback) { }
+
+    void begin(unsigned long baud, uint8_t config);
+    inline void begin(unsigned long baud) { begin(baud, SERIAL_8N1); }
+
+    // In single-wire half-duplex mode the core only switches back to
+    // receive in read() and peek(). Do it here too, so a caller that
+    // polls available() before reading (e.g., TMCStepper) sees the reply.
+    int available() override {
+      enableHalfDuplexRx();
+      return HardwareSerial::available();
+    }
+
+    // In single-wire half-duplex mode a device such as a TMC2209 replies a
+    // few bit-times after the request, so switch back to receive as soon as
+    // the transmit completes instead of waiting for the next read().
+    using HardwareSerial::write;
+    size_t write(const uint8_t *buffer, size_t size) override;
+
+    void _rx_complete_irq(serial_t *obj);
+    FORCE_INLINE static uint8_t buffer_overruns() { return 0; } // Not implemented. Void to avoid platform-dependent code.
+
+    protected:
+      usart_rx_callback_t _rx_callback;
+  };
+
+#endif
+
+typedef Serial1Class<MarlinSerial> MSerialT;
+extern MSerialT MSerial1;
+extern MSerialT MSerial2;
+extern MSerialT MSerial3;
+extern MSerialT MSerial4;
+extern MSerialT MSerial5;
+extern MSerialT MSerial6;
+extern MSerialT MSerial7;
+extern MSerialT MSerial8;
+extern MSerialT MSerial9;
+extern MSerialT MSerial10;
+extern MSerialT MSerialLP1;

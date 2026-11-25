@@ -43,10 +43,9 @@ static bool isDataProc(uint32_t instr) {
 }
 
 UnwResult UnwStartArm(UnwState * const state) {
-  bool found = false;
   uint16_t   t = UNW_MAX_INSTR_COUNT;
 
-  do {
+  for (;;) {
     uint32_t instr;
 
     /* Attempt to read the instruction */
@@ -415,7 +414,7 @@ UnwResult UnwStartArm(UnwState * const state) {
 
       /* S indicates that banked registers (untracked) are used, unless
        *  this is a load including the PC when the S-bit indicates that
-       *  that CPSR is loaded from SPSR (also untracked, but ignored).
+       *  CPSR is loaded from SPSR (also untracked, but ignored).
        */
       if (S && (!L || (regList & (0x01 << 15)) == 0)) {
         UnwPrintd1("\nError:S-bit set requiring banked registers\n");
@@ -432,7 +431,7 @@ UnwResult UnwStartArm(UnwState * const state) {
 
       /* Check if ascending or descending.
        *  Registers are loaded/stored in order of address.
-       *  i.e. r0 is at the lowest address, r15 at the highest.
+       *  i.e., r0 is at the lowest address, r15 at the highest.
        */
       r = U ? 0 : 15;
       do {
@@ -527,7 +526,7 @@ UnwResult UnwStartArm(UnwState * const state) {
 
     if (--t == 0) return UNWIND_EXHAUSTED;
 
-  } while (!found);
+  }
 
   return UNWIND_UNSUPPORTED;
 }

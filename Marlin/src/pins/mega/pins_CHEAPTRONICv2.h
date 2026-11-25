@@ -24,12 +24,12 @@
 /**
  * Cheaptronic v2.0 pin assignments
  * Built and sold by Michal Dyntar - RRO
- *          www.reprapobchod.cz
+ *          www.reprapobchod.cz (DOES NOT EXIST ANYMORE)
+ *          https://web.archive.org/web/20190306201523/reprapobchod.cz
+ * ATmega2560
  */
 
-#if NOT_TARGET(__AVR_ATmega2560__)
-  #error "Oops! Select 'Arduino/Genuino Mega or Mega 2560' in 'Tools > Board.'"
-#endif
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Cheaptronic v2.0"
 
@@ -86,8 +86,8 @@
 #define HEATER_1_PIN                           7
 #define HEATER_2_PIN                           8
 #define HEATER_BED_PIN                         9
-#ifndef FAN_PIN
-  #define FAN_PIN                              3
+#ifndef FAN0_PIN
+  #define FAN0_PIN                             3
 #endif
 #define FAN2_PIN                              58  // additional fan or light control output
 
@@ -113,7 +113,7 @@
 // LCD / Controller
 //
 #define LCD_PINS_RS                           19
-#define LCD_PINS_ENABLE                       42
+#define LCD_PINS_EN                           42
 #define LCD_PINS_D4                           18
 #define LCD_PINS_D5                           38
 #define LCD_PINS_D6                           41
@@ -128,8 +128,8 @@
 //
 #define BEEPER_PIN                            44
 
-#if ENABLED(SDSUPPORT)
-  #define SDSS                                53
+#if HAS_MEDIA
+  #define SD_SS_PIN                           53
   #define SD_DETECT_PIN                       49
 #endif
 

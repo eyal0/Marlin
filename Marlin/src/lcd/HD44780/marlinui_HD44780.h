@@ -27,6 +27,20 @@
 
 #include "../../inc/MarlinConfig.h"
 
+#if ENABLED(SHOW_CUSTOM_BOOTSCREEN)
+
+  #include "../../../_Bootscreen.h"
+
+  #ifdef CUSTOM_BOOTSCREEN_Y
+    #define CUSTOM_BOOT_LAST COUNT(custom_boot_lines) + CUSTOM_BOOTSCREEN_Y
+  #else
+    #define CUSTOM_BOOT_LAST COUNT(custom_boot_lines)
+  #endif
+
+  static_assert(CUSTOM_BOOT_LAST <= LCD_HEIGHT, "custom_boot_lines (plus CUSTOM_BOOTSCREEN_Y) doesn't fit on the selected LCD.");
+
+#endif
+
 #if ENABLED(LCD_I2C_TYPE_PCF8575)
 
   // NOTE: These are register-mapped pins on the PCF8575 controller, not Arduino pins.
@@ -70,10 +84,19 @@
 #elif ENABLED(SR_LCD_2W_NL)
 
   // 2 wire Non-latching LCD SR from:
-  // https://bitbucket.org/fmalpartida/new-liquidcrystal/wiki/schematics#!shiftregister-connection
+  // https://github.com/fmalpartida/New-LiquidCrystal/wiki/schematics#user-content-ShiftRegister_connection
   #include <LCD.h>
   #include <LiquidCrystal_SR.h>
   #define LCD_CLASS LiquidCrystal_SR
+
+#elif ENABLED(MIGHTYBOARD_LCD)
+
+  // 3-wire shift-register LCD for Mightyboard
+  // Optimized in-tree implementation
+  // Pin mapping: SR_STROBE_PIN, SR_DATA_PIN, SR_CLK_PIN
+
+  #include "mighty/mighty_lcd_serial.h"
+  #define LCD_CLASS MightyboardLCDSerial
 
 #elif ENABLED(SR_LCD_3W_NL)
 
@@ -90,6 +113,11 @@
   #include <LiquidCrystal_I2C.h>
   #define LCD_CLASS LiquidCrystal_I2C
 
+#elif ENABLED(YHCB2004)
+
+  #include <LiquidCrystal_AIP31068_SPI.h>
+  #define LCD_CLASS LiquidCrystal_AIP31068_SPI
+
 #else
 
   // Standard directly connected LCD implementations
@@ -98,5 +126,4 @@
 
 #endif
 
-#include "../fontutils.h"
 #include "../lcdprint.h"

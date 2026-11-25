@@ -23,12 +23,21 @@
 
 #include "../../inc/MarlinConfigPre.h"
 
+#if DISABLED(USE_ESP32_EXIO)
+
 #include "i2s.h"
 
 #include "../shared/Marduino.h"
-#include <driver/periph_ctrl.h>
-#include <rom/lldesc.h>
-#include <soc/i2s_struct.h>
+#if ESP32_CLASSIC
+  #include <driver/periph_ctrl.h>
+  #include <rom/lldesc.h>
+  #include <soc/i2s_struct.h>
+#else
+  // Other ESP32 variants send the stream through the ESP-IDF I2S driver
+  #include <driver/i2s.h>
+  #include <rom/gpio.h>
+  #include <soc/gpio_sig_map.h>
+#endif
 #include <freertos/queue.h>
 #include "../../module/stepper.h"
 
@@ -36,6 +45,14 @@
 #define DMA_BUF_LEN   4092                             // maximum size in bytes
 #define I2S_SAMPLE_SIZE 4                              // 4 bytes, 32 bits per sample
 #define DMA_SAMPLE_COUNT DMA_BUF_LEN / I2S_SAMPLE_SIZE // number of samples per buffer
+
+// output value
+uint32_t i2s_port_data = 0;
+
+// Samples pushed so far, for timing the stepper events
+static uint32_t sample_count = 0;
+
+#if ESP32_CLASSIC
 
 typedef enum {
   I2S_NUM_0 = 0x0,  /*!< I2S 0*/
@@ -55,19 +72,13 @@ static portMUX_TYPE i2s_spinlock[I2S_NUM_MAX] = {portMUX_INITIALIZER_UNLOCKED, p
 static i2s_dev_t* I2S[I2S_NUM_MAX] = {&I2S0, &I2S1};
 static i2s_dma_t dma;
 
-// output value
-uint32_t i2s_port_data = 0;
-
 #define I2S_ENTER_CRITICAL()  portENTER_CRITICAL(&i2s_spinlock[i2s_num])
 #define I2S_EXIT_CRITICAL()   portEXIT_CRITICAL(&i2s_spinlock[i2s_num])
 
 static inline void gpio_matrix_out_check(uint32_t gpio, uint32_t signal_idx, bool out_inv, bool oen_inv) {
-  //if pin = -1, do not need to configure
-  if (gpio != -1) {
-    PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
-    gpio_set_direction((gpio_num_t)gpio, (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
-    gpio_matrix_out(gpio, signal_idx, out_inv, oen_inv);
-  }
+  PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[gpio], PIN_FUNC_GPIO);
+  gpio_set_direction((gpio_num_t)gpio, (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
+  gpio_matrix_out(gpio, signal_idx, out_inv, oen_inv);
 }
 
 static esp_err_t i2s_reset_fifo(i2s_port_t i2s_num) {
@@ -135,30 +146,40 @@ static void IRAM_ATTR i2s_intr_handler_default(void *arg) {
 
   if (high_priority_task_awoken == pdTRUE) portYIELD_FROM_ISR();
 
-  // clear interrupt
-  I2S0.int_clr.val = I2S0.int_st.val; //clear pending interrupt
+  // Clear pending interrupt
+  I2S0.int_clr.val = I2S0.int_st.val;
 }
 
-void stepperTask(void* parameter) {
-  uint32_t remaining = 0;
+#else // !ESP32_CLASSIC
 
-  while (1) {
-    xQueueReceive(dma.queue, &dma.current, portMAX_DELAY);
-    dma.rw_pos = 0;
+static struct {
+  uint32_t *current;
+  uint32_t rw_pos;
+} dma;
 
-    while (dma.rw_pos < DMA_SAMPLE_COUNT) {
-      // Fill with the port data post pulse_phase until the next step
-      if (remaining) {
-        i2s_push_sample();
-        remaining--;
-      }
-      else {
-        Stepper::pulse_phase_isr();
-        remaining = Stepper::block_phase_isr();
-      }
-    }
+static uint32_t i2s_buffer[DMA_SAMPLE_COUNT];
+
+#endif // !ESP32_CLASSIC
+
+static void i2s_push_idle(hal_timer_t n);
+
+/**
+ * Feed the I2S stream with the stepper scheduler shared with the stepper timer ISR.
+ * One sample is one stepper timer tick. Step pulses push their own samples, so
+ * those are taken off the time to wait for the next stepper event.
+ */
+void stepperTask(void *parameter) {
+  for (;;) {
+    const uint32_t start = sample_count;
+    const hal_timer_t interval = stepper.isr_events(),
+                      used = sample_count - start;
+
+    // Wait out the rest of the interval. Never run the events again without letting time pass.
+    i2s_push_idle(interval > used ? interval - used : used ? 0 : 1); // Blocks while all DMA buffers are full
   }
 }
+
+#if ESP32_CLASSIC
 
 int i2s_init() {
   periph_module_enable(PERIPH_I2S0_MODULE);
@@ -254,13 +275,7 @@ int i2s_init() {
 
   I2S0.fifo_conf.dscr_en = 0;
 
-  I2S0.conf_chan.tx_chan_mod = (
-    #if ENABLED(I2S_STEPPER_SPLIT_STREAM)
-      4
-    #else
-      0
-    #endif
-  );
+  I2S0.conf_chan.tx_chan_mod = TERN(I2S_STEPPER_SPLIT_STREAM, 4, 0);
   I2S0.fifo_conf.tx_fifo_mod = 0;
   I2S0.conf.tx_mono = 0;
 
@@ -311,13 +326,62 @@ int i2s_init() {
   xTaskCreatePinnedToCore(stepperTask, "StepperTask", 10000, nullptr, 1, nullptr, CONFIG_ARDUINO_RUNNING_CORE); // run I2S stepper task on same core as rest of Marlin
 
   // Route the i2s pins to the appropriate GPIO
-  gpio_matrix_out_check(I2S_DATA, I2S0O_DATA_OUT23_IDX, 0, 0);
-  gpio_matrix_out_check(I2S_BCK, I2S0O_BCK_OUT_IDX, 0, 0);
-  gpio_matrix_out_check(I2S_WS, I2S0O_WS_OUT_IDX, 0, 0);
+  // If a pin is not defined, no need to configure
+  #if defined(I2S_DATA) && I2S_DATA >= 0
+    gpio_matrix_out_check(I2S_DATA, I2S0O_DATA_OUT23_IDX, 0, 0);
+  #endif
+  #if defined(I2S_BCK) && I2S_BCK >= 0
+    gpio_matrix_out_check(I2S_BCK, I2S0O_BCK_OUT_IDX, 0, 0);
+  #endif
+  #if defined(I2S_WS) && I2S_WS >= 0
+    gpio_matrix_out_check(I2S_WS, I2S0O_WS_OUT_IDX, 0, 0);
+  #endif
 
   // Start the I2S peripheral
   return i2s_start(I2S_NUM_0);
 }
+
+#elif ENABLED(I2S_STEPPER_STREAM) // !ESP32_CLASSIC
+
+/**
+ * The same stream as the original ESP32: each 32-bit sample is one stereo frame
+ * of two 16-bit slots, high half first, at STEPPER_TIMER_RATE (250 kHz, BCK 8 MHz).
+ * WS is inverted so it rises at the start of each frame, latching the 74HC595s.
+ * MCLK = 128 * 250 kHz = 32 MHz divides the 160 MHz PLL exactly.
+ */
+int i2s_init() {
+  dma.current = i2s_buffer;
+  dma.rw_pos = 0;
+
+  i2s_config_t cfg = {};
+  cfg.mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_TX);
+  cfg.sample_rate = STEPPER_TIMER_RATE;
+  cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
+  cfg.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
+  cfg.communication_format = I2S_COMM_FORMAT_STAND_MSB;
+  cfg.dma_buf_count = DMA_BUF_COUNT;
+  cfg.dma_buf_len = DMA_SAMPLE_COUNT;
+  cfg.use_apll = false;
+  cfg.tx_desc_auto_clear = false;
+  cfg.mclk_multiple = I2S_MCLK_MULTIPLE_128;
+  if (i2s_driver_install(I2S_NUM_0, &cfg, 0, nullptr) != ESP_OK) return -1;
+
+  i2s_pin_config_t pins = {};
+  pins.mck_io_num = I2S_PIN_NO_CHANGE;
+  pins.bck_io_num = I2S_BCK;
+  pins.ws_io_num = I2S_WS;
+  pins.data_out_num = I2S_DATA;
+  pins.data_in_num = I2S_PIN_NO_CHANGE;
+  if (i2s_set_pin(I2S_NUM_0, &pins) != ESP_OK) return -1;
+  gpio_matrix_out(I2S_WS, I2S0O_WS_OUT_IDX, true, false); // Invert WS
+
+  // Create the task that will feed the buffer
+  xTaskCreatePinnedToCore(stepperTask, "StepperTask", 10000, nullptr, 1, nullptr, CONFIG_ARDUINO_RUNNING_CORE); // run I2S stepper task on same core as rest of Marlin
+
+  return 0;
+}
+
+#endif // !ESP32_CLASSIC
 
 void i2s_write(uint8_t pin, uint8_t val) {
   #if ENABLED(I2S_STEPPER_SPLIT_STREAM)
@@ -336,8 +400,89 @@ uint8_t i2s_state(uint8_t pin) {
   return TEST(i2s_port_data, pin);
 }
 
-void i2s_push_sample() {
-  dma.current[dma.rw_pos++] = i2s_port_data;
+#if ESP32_CLASSIC
+
+// Make sure the current DMA buffer has room, taking the next free one when it's full
+static void i2s_buffer_ready() {
+  if (!dma.current || dma.rw_pos >= DMA_SAMPLE_COUNT) {
+    xQueueReceive(dma.queue, &dma.current, portMAX_DELAY);
+    dma.rw_pos = 0;
+  }
 }
 
+#else
+
+// Send the buffer to the I2S driver when it's full. This blocks while all DMA buffers are full.
+static void i2s_buffer_ready() {
+  if (dma.rw_pos < DMA_SAMPLE_COUNT) return;
+
+  // The driver sends the low 16 bits of a sample first, so swap the halves
+  for (uint32_t i = 0; i < DMA_SAMPLE_COUNT; ++i) i2s_buffer[i] = (i2s_buffer[i] << 16) | (i2s_buffer[i] >> 16);
+
+  size_t written;
+  i2s_write(I2S_NUM_0, i2s_buffer, sizeof(i2s_buffer), &written, portMAX_DELAY);
+  dma.rw_pos = 0;
+}
+
+#endif
+
+void i2s_push_sample() {
+  i2s_buffer_ready();
+
+  // Every 4µs (when space in DMA buffer) toggle each expander PWM output using
+  // the current duty cycle/frequency so they sync with any steps (once
+  // through the DMA/FIFO buffers).  PWM signal inversion handled by other functions
+  for (uint8_t p = 0; p < MAX_EXPANDER_BITS; ++p) {
+    if (hal.pwm_pin_data[p].pwm_duty_ticks > 0) { // pin has active pwm?
+      if (hal.pwm_pin_data[p].pwm_tick_count == 0) {
+        if (TEST32(i2s_port_data, p)) {  // hi->lo
+          CBI32(i2s_port_data, p);
+          hal.pwm_pin_data[p].pwm_tick_count = hal.pwm_pin_data[p].pwm_cycle_ticks - hal.pwm_pin_data[p].pwm_duty_ticks;
+        }
+        else { // lo->hi
+          SBI32(i2s_port_data, p);
+          hal.pwm_pin_data[p].pwm_tick_count = hal.pwm_pin_data[p].pwm_duty_ticks;
+        }
+      }
+      else
+        hal.pwm_pin_data[p].pwm_tick_count--;
+    }
+  }
+
+  dma.current[dma.rw_pos++] = i2s_port_data;
+  sample_count++;
+}
+
+/**
+ * Push the idle samples between stepper events. The output only changes where an
+ * expander PWM pin toggles, so the samples up to the next toggle are written as one run.
+ */
+static void i2s_push_idle(hal_timer_t n) {
+  while (n) {
+    i2s_buffer_ready();
+
+    // Samples until the buffer is full, the idle time ends, or a PWM pin toggles
+    uint32_t run = _MIN(n, hal_timer_t(DMA_SAMPLE_COUNT - dma.rw_pos)), pwm_pins = 0;
+    for (uint8_t p = 0; p < MAX_EXPANDER_BITS; ++p)
+      if (hal.pwm_pin_data[p].pwm_duty_ticks > 0) {
+        SBI32(pwm_pins, p);
+        NOMORE(run, hal.pwm_pin_data[p].pwm_tick_count);
+      }
+
+    if (!run) { i2s_push_sample(); --n; continue; } // A PWM pin toggles in this sample
+
+    for (uint8_t p = 0; p < MAX_EXPANDER_BITS; ++p)
+      if (TEST32(pwm_pins, p)) hal.pwm_pin_data[p].pwm_tick_count -= run;
+
+    const uint32_t data = i2s_port_data;
+    uint32_t * const out = &dma.current[dma.rw_pos];
+    for (uint32_t i = 0; i < run; ++i) out[i] = data;
+
+    dma.rw_pos += run;
+    sample_count += run;
+    n -= run;
+  }
+}
+
+#endif // !USE_ESP32_EXIO
 #endif // ARDUINO_ARCH_ESP32

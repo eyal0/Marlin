@@ -1,4 +1,26 @@
 /**
+ * Marlin 3D Printer Firmware
+ * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
+ *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ */
+
+/**
  * @file    lcdprint_hd44780.cpp
  * @brief   LCD print api for HD44780
  * @author  Yunhui Fu (yhfudev@gmail.com)
@@ -28,15 +50,15 @@ extern LCD_CLASS lcd;
 int lcd_glyph_height() { return 1; }
 
 typedef struct _hd44780_charmap_t {
-  wchar_t uchar; // the unicode char
+  lchar_t uchar; // the unicode char
   uint8_t idx;   // the glyph of the char in the ROM
   uint8_t idx2;  // the char used to be combined with the idx to simulate a single char
 } hd44780_charmap_t;
 
 #ifdef __AVR__
-  #define IV(a) U##a
+  #define IV(a) lchar_t(U##a)
 #else
-  #define IV(a) L##a
+  #define IV(a) lchar_t(L##a)
 #endif
 
 static const hd44780_charmap_t g_hd44780_charmap_device[] PROGMEM = {
@@ -416,7 +438,9 @@ static const hd44780_charmap_t g_hd44780_charmap_device[] PROGMEM = {
     {IV('⎲'), 0x12, 0},
     {IV('⎳'), 0x13, 0},
 
-    {IV('⏱'), 0x07, 0}, // Marlin special: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛🕜🕝🕞🕟🕠🕡🕢🕣🕤🕥🕦🕧 ⌚⌛⏰⏱⏳⧖⧗'  LCD_STR_CLOCK (0x05)
+    #if NEED_CLOCK_GLYPH
+      {IV('⏱'), 0x07, 0}, // Marlin special: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛🕜🕝🕞🕟🕠🕡🕢🕣🕤🕥🕦🕧 ⌚⌛⏰⏱⏳⧖⧗'  LCD_STR_CLOCK (0x05)
+    #endif
     {IV('┌'), 0xC9, 0},
     {IV('┐'), 0xCA, 0},
     {IV('└'), 0xCB, 0},
@@ -426,7 +450,6 @@ static const hd44780_charmap_t g_hd44780_charmap_device[] PROGMEM = {
     {IV('⭡'), 0xC5, 0},
     {IV('⭢'), 0xC7, 0},
     {IV('⭣'), 0xC6, 0},
-
 
     {IV('⯆'), 0xF5, 0},
     {IV('⯇'), 0xF7, 0}, // ⯅
@@ -477,7 +500,6 @@ static const hd44780_charmap_t g_hd44780_charmap_device[] PROGMEM = {
     //{IV(''), 0x9D, 0},
     //{IV(''), 0x9E, 0},
     //{IV(''), 0x9F, 0},
-
 
     {IV('¼'), 0xF0, 0}, // 00BC
     {IV('⅓'), 0xF1, 0},
@@ -940,7 +962,10 @@ static const hd44780_charmap_t g_hd44780_charmap_common[] PROGMEM = {
   {IV('≡'), '=', 0}, // 2261
   {IV('≤'), '<', '='},// 2264, ≤≥ ⩽⩾
   {IV('≥'), '>', '='}, // 2265
-  {IV('⏱'), 0x07, 0}, // 23F1, Marlin special: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛🕜🕝🕞🕟🕠🕡🕢🕣🕤🕥🕦🕧 ⌚⌛⏰⏱⏳⧖⧗'  LCD_STR_CLOCK (0x05)
+
+  #if NEED_CLOCK_GLYPH
+    {IV('⏱'), 0x07, 0}, // 23F1, Marlin special: '🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛🕜🕝🕞🕟🕠🕡🕢🕣🕤🕥🕦🕧 ⌚⌛⏰⏱⏳⧖⧗'  LCD_STR_CLOCK (0x05)
+  #endif
 
   {IV('゠'), '=', 0}, // 30A0
 
@@ -970,7 +995,7 @@ void lcd_put_int(const int i) { lcd.print(i); }
 
 // return < 0 on error
 // return the advanced cols
-int lcd_put_wchar_max(wchar_t c, pixel_len_t max_length) {
+int lcd_put_lchar_max(const lchar_t &c, const pixel_len_t max_length) {
 
   // find the HD44780 internal ROM first
   int ret;
@@ -1021,28 +1046,28 @@ int lcd_put_wchar_max(wchar_t c, pixel_len_t max_length) {
  * @param cb_read_byte : the callback function to read one byte from the utf8_str (from RAM or ROM)
  * @param max_length : the pixel length of the string allowed (or number of slots in HD44780)
  *
- * @return the number of pixels advanced
+ * @return the number of characters emitted
  *
  * Draw a UTF-8 string
  */
-static int lcd_put_u8str_max_cb(const char * utf8_str, uint8_t (*cb_read_byte)(uint8_t * str), pixel_len_t max_length) {
+static int lcd_put_u8str_max_cb(const char * utf8_str, read_byte_cb_t cb_read_byte, const pixel_len_t max_length) {
   pixel_len_t ret = 0;
-  uint8_t *p = (uint8_t *)utf8_str;
+  const uint8_t *p = (uint8_t *)utf8_str;
   while (ret < max_length) {
-    wchar_t ch = 0;
-    p = get_utf8_value_cb(p, cb_read_byte, &ch);
-    if (!ch) break;
-    ret += lcd_put_wchar_max(ch, max_length - ret);
+    lchar_t wc;
+    p = get_utf8_value_cb(p, cb_read_byte, wc);
+    if (!wc) break;
+    ret += lcd_put_lchar_max(wc, max_length - ret);
   }
   return (int)ret;
 }
 
-int lcd_put_u8str_max(const char * utf8_str, pixel_len_t max_length) {
+int lcd_put_u8str_max(const char * utf8_str, const pixel_len_t max_length) {
   return lcd_put_u8str_max_cb(utf8_str, read_byte_ram, max_length);
 }
 
-int lcd_put_u8str_max_P(PGM_P utf8_str_P, pixel_len_t max_length) {
-  return lcd_put_u8str_max_cb(utf8_str_P, read_byte_rom, max_length);
+int lcd_put_u8str_max_P(PGM_P utf8_pstr, const pixel_len_t max_length) {
+  return lcd_put_u8str_max_cb(utf8_pstr, read_byte_rom, max_length);
 }
 
 #if ENABLED(DEBUG_LCDPRINT)

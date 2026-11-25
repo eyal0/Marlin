@@ -21,37 +21,44 @@
  */
 #pragma once
 
-//
-// Prefix header for all Marlin sources
-//
+/**
+ * MarlinConfig.h
+ *
+ * Prefix header for all Marlin sources. Includes the following:
+ *
+ * Conditionals-6-type.h
+ *   MarlinConfigPre-6-type.h
+ *     Conditionals-5-post.h
+ *       MarlinConfigPre.h
+ *         ... (see the file) ...
+ *       HAL.h
+ *       pins.h
+ *       HAL/timers.h
+ *       HAL/spi_pins.h
+ *     types.h
+ */
 
-#include "MarlinConfigPre.h"
+#include "Conditionals-6-type.h"
 
 #ifndef __MARLIN_DEPS__
-  //#include "../HAL/HAL.h"
-#endif
 
-//#include "../pins/pins.h"
+  #include HAL_PATH(.., inc/Conditionals_type.h)
 
-#ifndef __MARLIN_DEPS__
-  //#include HAL_PATH(../HAL, timers.h)
-  //#include HAL_PATH(../HAL, spi_pins.h)
-#endif
-
-#include "Conditionals_post.h"
-
-#ifndef __MARLIN_DEPS__
-
-  //#include HAL_PATH(../HAL, inc/Conditionals_post.h)
-
-  #include "../core/types.h"  // Ahead of sanity-checks
-
-  //#include "SanityCheck.h"
-  //#include HAL_PATH(../HAL, inc/SanityCheck.h)
+  #include "Changes.h"
 
   // Include all core headers
-  //#include "../core/language.h"
+  #include "../core/language.h"
   #include "../core/utility.h"
-  //#include "../core/serial.h"
+  #include "../core/mstring.h"
+  #include "../core/serial.h"
+  #include "../core/endianness.h"
+  #include "../MarlinCore.h"
 
+#endif
+
+#include "../core/multi_language.h"
+
+#ifndef __MARLIN_DEPS__
+  #include "SanityCheck.h"
+  #include HAL_PATH(.., inc/SanityCheck.h)
 #endif

@@ -20,14 +20,17 @@
  *
  */
 
-#include "FlushableHardwareSerial.h"
-
 #ifdef ARDUINO_ARCH_ESP32
 
-FlushableHardwareSerial::FlushableHardwareSerial(int uart_nr)
-    : HardwareSerial(uart_nr)
-{}
+#include "FlushableHardwareSerial.h"
 
-FlushableHardwareSerial flushableSerial(0);
+typedef Serial1Class<FlushableHardwareSerial> MSerialT;
 
-#endif // ARDUINO_ARCH_ESP32
+MSerialT flushableSerial(ENABLED(EMERGENCY_PARSER), 0);
+#if SERIAL_PORT_2 == 2
+  MSerialT flushableSerial2(ENABLED(EMERGENCY_PARSER), 2);
+#else
+  MSerialT flushableSerial2(false, 2); // Not a host port
+#endif
+
+#endif

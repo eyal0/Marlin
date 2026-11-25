@@ -23,11 +23,11 @@
 
 /**
  * Leapfrog Driver board pin assignments
+ * ATmega2560, ATmega1280
  */
 
-#if NOT_TARGET(__AVR_ATmega1280__, __AVR_ATmega2560__)
-  #error "Oops! Select 'Mega 1280' or 'Mega 2560' in 'Tools > Board.'"
-#endif
+#define ALLOW_MEGA1280
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Leapfrog"
 
@@ -79,14 +79,14 @@
 #define HEATER_2_PIN                          11  // 13
 #define HEATER_BED_PIN                        10  // 14/15
 
-#define FAN_PIN                                7
+#define FAN0_PIN                               7
 
 //
 // Misc. Functions
 //
-#define SDSS                                  11
+#define SD_SS_PIN                             11
 #define LED_PIN                               13
-#define SOL1_PIN                              16
-#define SOL2_PIN                              17
+#define SOL0_PIN                              16
+#define SOL1_PIN                              17
 
 /*  Unused (1) (2) (3) 4 5 6 7 8 9 10 11 12 13 (14) (15) (16) 17 (18) (19) (20) (21) (22) (23) 24 (25) (26) (27) 28 (29) (30) (31)  */

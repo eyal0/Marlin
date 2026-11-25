@@ -23,105 +23,96 @@
 
 #include "inc/MarlinConfig.h"
 
-#ifdef DEBUG_GCODE_PARSER
-  #include "gcode/parser.h"
-#endif
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-void stop();
-
-// Pass true to keep steppers from timing out
-void idle(TERN_(ADVANCED_PAUSE_FEATURE, bool no_stepper_sleep=false));
-inline void idle_no_sleep() { idle(TERN_(ADVANCED_PAUSE_FEATURE, true)); }
-
-#if ENABLED(EXPERIMENTAL_I2CBUS)
-  #include "feature/twibus.h"
-  extern TWIBus i2c;
-#endif
-
-#if ENABLED(G38_PROBE_TARGET)
-  extern uint8_t G38_move;          // Flag to tell the ISR that G38 is in progress, and the type
-  extern bool G38_did_trigger;      // Flag from the ISR to indicate the endstop changed
-#endif
-
-/**
- * The axis order in all axis related arrays is X, Y, Z, E
- */
-void enable_e_steppers();
-void enable_all_steppers();
-void disable_e_stepper(const uint8_t e);
-void disable_e_steppers();
-void disable_all_steppers();
-
-void kill(PGM_P const lcd_error=nullptr, PGM_P const lcd_component=nullptr, const bool steppers_off=false);
-void minkill(const bool steppers_off=false);
-
-void quickstop_stepper();
-
 // Global State of the firmware
 enum MarlinState : uint8_t {
-  MF_INITIALIZING =  0,
-  MF_RUNNING      = _BV(0),
-  MF_PAUSED       = _BV(1),
-  MF_WAITING      = _BV(2),
-  MF_STOPPED      = _BV(3),
-  MF_SD_COMPLETE  = _BV(4),
-  MF_KILLED       = _BV(7)
+  MF_INITIALIZING = 0,
+  MF_STOPPED,
+  MF_KILLED,
+  MF_RUNNING,
+  MF_SD_COMPLETE,
+  MF_PAUSED,
+  MF_WAITING,
 };
 
-extern MarlinState marlin_state;
-inline bool IsRunning() { return marlin_state == MF_RUNNING; }
-inline bool IsStopped() { return marlin_state != MF_RUNNING; }
+typedef bool (*testFunc_t)();
 
-bool printingIsActive();
-bool printingIsPaused();
-void startOrResumeJob();
+// Delay ensuring that temperatures are updated and the watchdog is kept alive
+void safe_delay(millis_t ms);
 
-extern bool wait_for_heatup;
+// Singleton for Marlin global data and methods
 
-#if HAS_RESUME_CONTINUE
-  extern bool wait_for_user;
-  void wait_for_user_response(millis_t ms=0, const bool no_sleep=false);
-#endif
-
-#if ENABLED(PSU_CONTROL)
-  extern bool powersupply_on;
-  #define PSU_PIN_ON()  do{ OUT_WRITE(PS_ON_PIN,  PSU_ACTIVE_STATE); powersupply_on = true;  }while(0)
-  #define PSU_PIN_OFF() do{ OUT_WRITE(PS_ON_PIN, !PSU_ACTIVE_STATE); powersupply_on = false; }while(0)
-  #if ENABLED(AUTO_POWER_CONTROL)
-    #define PSU_ON()       powerManager.power_on()
-    #define PSU_OFF()      powerManager.power_off()
-    #define PSU_OFF_SOON() powerManager.power_off_soon()
-  #else
-    #define PSU_ON()     PSU_PIN_ON()
-    #define PSU_OFF()    PSU_PIN_OFF()
-    #define PSU_OFF_SOON PSU_OFF
+class Marlin {
+public:
+  #if ENABLED(CONFIGURABLE_MACHINE_NAME)
+    static MString<64> machine_name;
   #endif
-#endif
 
-bool pin_is_protected(const pin_t pin);
-void protected_pin_err();
+  static MarlinState state;
+  static void setState(const MarlinState s) { state = s; }
+  static bool is(const MarlinState s) { return state == s; }
+  static bool isStopped() { return is(MF_STOPPED); }
+  static bool isRunning() { return state >= MF_RUNNING; }
 
-#if HAS_SUICIDE
-  inline void suicide() { OUT_WRITE(SUICIDE_PIN, SUICIDE_PIN_INVERTING); }
-#endif
+  static bool printingIsActive();
+  static bool printJobOngoing();
+  static bool printingIsPaused();
+  static void startOrResumeJob();
 
-#if HAS_KILL
-  #ifndef KILL_PIN_STATE
-    #define KILL_PIN_STATE LOW
+  static bool printer_busy();
+
+  static void stop();
+
+  // Maintain all important activities
+  static void manage_inactivity(const bool no_stepper_sleep=false);
+
+  // Pass true to keep steppers from timing out
+  static void idle(const bool no_stepper_sleep=false);
+  static void idle_no_sleep() { idle(true); }
+
+  static void kill(FSTR_P const lcd_error=nullptr, FSTR_P const lcd_component=nullptr, const bool steppers_off=false);
+  static void minkill(const bool steppers_off=false);
+
+  #if HAS_RESUME_CONTINUE
+    // Global waiting for user response
+    static bool wait_for_user;
+    static void wait_start() { wait_for_user = true; }
+    static void user_resume() { wait_for_user = false; }
+    static void wait_for_user_response(millis_t ms=0, const bool no_sleep=false);
   #endif
-  inline bool kill_state() { return READ(KILL_PIN) == KILL_PIN_STATE; }
-#endif
 
-#if ENABLED(G29_RETRY_AND_RECOVER)
-  void event_probe_recover();
-  void event_probe_failure();
-#endif
+  // Global waiting for heatup state
+  static bool wait_for_heatup;
+  static bool is_heating() { return wait_for_heatup; }
+  static void heatup_start() { wait_for_heatup = true; }
+  static void heatup_done() { wait_for_heatup = false; }
+  static void end_waiting() { TERN_(HAS_RESUME_CONTINUE, wait_for_user =) wait_for_heatup = false; }
 
-extern const char NUL_STR[], M112_KILL_STR[], G28_STR[], M21_STR[], M23_STR[], M24_STR[],
-                  SP_A_STR[], SP_B_STR[], SP_C_STR[],
-                  SP_P_STR[], SP_T_STR[], SP_X_STR[], SP_Y_STR[], SP_Z_STR[], SP_E_STR[],
-                  X_LBL[], Y_LBL[], Z_LBL[], E_LBL[], SP_X_LBL[], SP_Y_LBL[], SP_Z_LBL[], SP_E_LBL[];
+  // Shared function for M42 / M43
+  static bool pin_is_protected(const pin_t pin);
+
+  #if HAS_SUICIDE
+    static void suicide() { OUT_WRITE(SUICIDE_PIN, SUICIDE_PIN_STATE); }
+  #endif
+
+  static bool kill_state() {
+    return (
+      #if HAS_KILL
+        #ifndef KILL_PIN_STATE
+          #define KILL_PIN_STATE LOW
+        #endif
+        READ(KILL_PIN) == KILL_PIN_STATE
+      #else
+        false
+      #endif
+    );
+  }
+
+};
+
+extern Marlin marlin;
+
+extern const char M112_KILL_STR[];

@@ -29,33 +29,18 @@
  */
 
 /**
- * Rev B    26 DEC 2016
- *
- * 1) added pointer to a current Arduino IDE extension
- * 2) added support for M3, M4 & M5 spindle control commands
- * 3) added case light pin definition
- */
-
-/**
- * A useable Arduino IDE extension (board manager) can be found at
+ * Requires this Arduino IDE extension for Boards Manager:
  * https://github.com/Lauszus/Sanguino
  *
- * This extension has been tested on Arduino 1.6.12 & 1.8.0
- *
- * Here's the JSON path:
+ * Follow the installation instructions at https://learn.sparkfun.com/tutorials/installing-board-definitions-in-the-arduino-ide
+ * Just use this JSON URL instead of Sparkfun's:
  * https://raw.githubusercontent.com/Lauszus/Sanguino/master/package_lauszus_sanguino_index.json
  *
- * When installing select 1.0.2
- *
- * Installation instructions can be found at https://learn.sparkfun.com/pages/CustomBoardsArduino
- * Just use the above JSON URL instead of Sparkfun's JSON.
- *
- * Once installed select the Sanguino board and then select the CPU.
+ * Once installed select the SANGUINO board and then select the CPU.
  */
 
-#if NOT_TARGET(__AVR_ATmega644P__, __AVR_ATmega644__, __AVR_ATmega1284P__)
-  #error "Oops! Select 'Sanguino' in 'Tools > Boards' and 'ATmega644', 'ATmega644P', or 'ATmega1284P' in 'Tools > Processor.'"
-#endif
+#define ALLOW_MEGA644
+#include "env_validate.h"
 
 #define BOARD_INFO_NAME "Gen7 Custom"
 
@@ -100,7 +85,7 @@
 //
 // Misc. Functions
 //
-#define SDSS                                  31  // SCL pin of I2C header || CS Pin for SD Card support
+#define SD_SS_PIN                             31  // SCL pin of I2C header || CS Pin for SD Card support
 #define PS_ON_PIN                             19
 
 #ifndef CASE_LIGHT_PIN
@@ -117,7 +102,7 @@
 
 // 4bit LCD Support
 #define LCD_PINS_RS                           18
-#define LCD_PINS_ENABLE                       17
+#define LCD_PINS_EN                           17
 #define LCD_PINS_D4                           16
 #define LCD_PINS_D5                           15
 #define LCD_PINS_D6                           13
@@ -135,6 +120,8 @@
 //
 // M3/M4/M5 - Spindle/Laser Control
 //
-#define SPINDLE_LASER_ENA_PIN                  5  // Pullup or pulldown!
-#define SPINDLE_LASER_PWM_PIN                 16  // Hardware PWM
-#define SPINDLE_DIR_PIN                        6
+#if HAS_CUTTER
+  #define SPINDLE_LASER_PWM_PIN               16  // Hardware PWM
+  #define SPINDLE_LASER_ENA_PIN                5  // Pullup or pulldown!
+  #define SPINDLE_DIR_PIN                      6
+#endif

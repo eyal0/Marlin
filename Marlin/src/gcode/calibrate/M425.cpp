@@ -32,33 +32,33 @@
 /**
  * M425: Enable and tune backlash correction.
  *
- *   F<fraction>     Enable/disable/fade-out backlash correction (0.0 to 1.0)
- *   S<smoothing_mm> Distance over which backlash correction is spread
- *   X<distance_mm>  Set the backlash distance on X (0 to disable)
- *   Y<distance_mm>                        ... on Y
- *   Z<distance_mm>                        ... on Z
- *   X               If a backlash measurement was done on X, copy that value
- *   Y                                              ... on Y
- *   Z                                              ... on Z
+ *   F<fraction>  Enable/disable/fade-out backlash correction (0.0 to 1.0)
+ *   S<length>    Distance over which backlash correction is spread
+ *   X<length>    Set the backlash distance on X (0 to disable)
+ *   Y<length>                          ... on Y
+ *   Z<length>                          ... on Z
+ *   X            If a backlash measurement was done on X, copy that value
+ *   Y                                           ... on Y
+ *   Z                                           ... on Z
  *
  * Type M425 without any arguments to show active values.
  */
 void GcodeSuite::M425() {
   bool noArgs = true;
 
-  auto axis_can_calibrate = [](const uint8_t a) {
+  auto axis_can_calibrate = [](const uint8_t a) -> bool {
+    #define _CAN_CASE(N) case N##_AXIS: return bool(AXIS_CAN_CALIBRATE(N));
     switch (a) {
-      default:
-      case X_AXIS: return AXIS_CAN_CALIBRATE(X);
-      case Y_AXIS: return AXIS_CAN_CALIBRATE(Y);
-      case Z_AXIS: return AXIS_CAN_CALIBRATE(Z);
+      MAIN_AXIS_MAP(_CAN_CASE)
+      default: break;
     }
+    return false;
   };
 
-  LOOP_XYZ(a) {
-    if (axis_can_calibrate(a) && parser.seen(XYZ_CHAR(a))) {
+  LOOP_NUM_AXES(a) {
+    if (axis_can_calibrate(a) && parser.seen(AXIS_CHAR(a))) {
       planner.synchronize();
-      backlash.distance_mm[a] = parser.has_value() ? parser.value_linear_units() : backlash.get_measurement(AxisEnum(a));
+      backlash.set_distance_mm((AxisEnum)a, parser.has_value() ? parser.value_axis_units((AxisEnum)a) : backlash.get_measurement((AxisEnum)a));
       noArgs = false;
     }
   }
@@ -72,33 +72,30 @@ void GcodeSuite::M425() {
   #ifdef BACKLASH_SMOOTHING_MM
     if (parser.seen('S')) {
       planner.synchronize();
-      backlash.smoothing_mm = parser.value_linear_units();
+      backlash.set_smoothing_mm(parser.value_linear_units());
       noArgs = false;
     }
   #endif
 
   if (noArgs) {
     SERIAL_ECHOPGM("Backlash Correction ");
-    if (!backlash.correction) SERIAL_ECHOPGM("in");
+    if (!backlash.get_correction_uint8()) SERIAL_ECHOPGM("in");
     SERIAL_ECHOLNPGM("active:");
-    SERIAL_ECHOLNPAIR("  Correction Amount/Fade-out:     F", backlash.get_correction(), " (F1.0 = full, F0.0 = none)");
+    SERIAL_ECHOLNPGM("  Correction Amount/Fade-out:     F", backlash.get_correction(), " (F1.0 = full, F0.0 = none)");
     SERIAL_ECHOPGM("  Backlash Distance (mm):        ");
-    LOOP_XYZ(a) if (axis_can_calibrate(a)) {
-      SERIAL_CHAR(' ', XYZ_CHAR(a));
-      SERIAL_ECHO(backlash.distance_mm[a]);
-      SERIAL_EOL();
+    LOOP_NUM_AXES(a) if (axis_can_calibrate(a)) {
+      SERIAL_ECHOLNPGM_P((PGM_P)pgm_read_ptr(&SP_AXIS_STR[a]), backlash.get_distance_mm((AxisEnum)a));
     }
 
     #ifdef BACKLASH_SMOOTHING_MM
-      SERIAL_ECHOLNPAIR("  Smoothing (mm):                 S", backlash.smoothing_mm);
+      SERIAL_ECHOLNPGM("  Smoothing (mm):                 S", backlash.get_smoothing_mm());
     #endif
 
     #if ENABLED(MEASURE_BACKLASH_WHEN_PROBING)
       SERIAL_ECHOPGM("  Average measured backlash (mm):");
       if (backlash.has_any_measurement()) {
-        LOOP_XYZ(a) if (axis_can_calibrate(a) && backlash.has_measurement(AxisEnum(a))) {
-          SERIAL_CHAR(' ', XYZ_CHAR(a));
-          SERIAL_ECHO(backlash.get_measurement(AxisEnum(a)));
+        LOOP_NUM_AXES(a) if (axis_can_calibrate(a) && backlash.has_measurement((AxisEnum)a)) {
+          SERIAL_ECHOPGM_P((PGM_P)pgm_read_ptr(&SP_AXIS_STR[a]), backlash.get_measurement((AxisEnum)a));
         }
       }
       else
@@ -106,6 +103,32 @@ void GcodeSuite::M425() {
       SERIAL_EOL();
     #endif
   }
+}
+
+void GcodeSuite::M425_report(const bool forReplay/*=true*/) {
+  TERN_(MARLIN_SMALL_BUILD, return);
+
+  report_heading_etc(forReplay, F(STR_BACKLASH_COMPENSATION));
+  SERIAL_ECHOPGM_P(
+    PSTR("  M425 F"), backlash.get_correction()
+    #ifdef BACKLASH_SMOOTHING_MM
+      , PSTR(" S"), LINEAR_UNIT(backlash.get_smoothing_mm())
+    #endif
+  );
+  #if NUM_AXES
+    SERIAL_ECHOPGM_P(NUM_AXIS_PAIRED_LIST(
+      SP_X_STR, LINEAR_UNIT(backlash.get_distance_mm(X_AXIS)),
+      SP_Y_STR, LINEAR_UNIT(backlash.get_distance_mm(Y_AXIS)),
+      SP_Z_STR, LINEAR_UNIT(backlash.get_distance_mm(Z_AXIS)),
+      SP_I_STR, I_AXIS_UNIT(backlash.get_distance_mm(I_AXIS)),
+      SP_J_STR, J_AXIS_UNIT(backlash.get_distance_mm(J_AXIS)),
+      SP_K_STR, K_AXIS_UNIT(backlash.get_distance_mm(K_AXIS)),
+      SP_U_STR, U_AXIS_UNIT(backlash.get_distance_mm(U_AXIS)),
+      SP_V_STR, V_AXIS_UNIT(backlash.get_distance_mm(V_AXIS)),
+      SP_W_STR, W_AXIS_UNIT(backlash.get_distance_mm(W_AXIS))
+    ));
+  #endif
+  SERIAL_EOL();
 }
 
 #endif // BACKLASH_GCODE

@@ -21,79 +21,66 @@
  */
 #pragma once
 
-#include "stdint.h"
+#include "../../inc/MarlinConfigPre.h"
 
-
-extern const uint8_t marlin_logo_112x38x1[];
-extern const uint8_t marlin_logo_228x255x2[];
-extern const uint8_t marlin_logo_228x255x4[];
-extern const uint16_t marlin_logo_195x59x16[];
-extern const uint16_t marlin_logo_320x240x16[];
-extern const uint16_t marlin_logo_480x320x16[];
-extern const uint16_t background_320x30x16[];
-
-extern const uint8_t hotend_64x64x4[];
-extern const uint8_t bed_64x64x4[], bed_heated_64x64x4[];
-extern const uint8_t chamber_64x64x4[], chamber_heated_64x64x4[];
-extern const uint8_t fan0_64x64x4[], fan1_64x64x4[];
-extern const uint8_t fan_slow0_64x64x4[], fan_slow1_64x64x4[];
-extern const uint8_t fan_fast0_64x64x4[], fan_fast1_64x64x4[];
-extern const uint8_t sd_64x64x4[];
-extern const uint8_t home_64x64x4[];
-extern const uint8_t btn_rounded_64x52x4[];
-extern const uint8_t menu_64x64x4[];
-extern const uint8_t settings_64x64x4[];
-extern const uint8_t confirm_64x64x4[];
-extern const uint8_t cancel_64x64x4[];
-extern const uint8_t increase_64x64x4[];
-extern const uint8_t decrease_64x64x4[];
-extern const uint8_t pause_64x64x4[];
-
-extern const uint8_t feedrate_32x32x4[];
-extern const uint8_t flowrate_32x32x4[];
-extern const uint8_t directory_32x32x4[];
-extern const uint8_t back_32x32x4[];
-extern const uint8_t up_32x32x4[];
-extern const uint8_t down_32x32x4[];
-extern const uint8_t left_32x32x4[];
-extern const uint8_t right_32x32x4[];
-extern const uint8_t refresh_32x32x4[];
-extern const uint8_t leveling_32x32x4[];
-
-extern const uint8_t slider_8x16x4[];
+#if ENABLED(COMPACT_MARLIN_BOOT_LOGO)
+  #define MARLIN_LOGO_CHOSEN(W,H) { (void *)marlin_logo_##W##x##H##x16_rle16, W, H, RLE16 }
+  #if ENABLED(SHOW_CUSTOM_BOOTSCREEN)
+    #define _CUSTOM_BOOTSCREEN_CHOSEN(W,H) { (void *)custom_bootscreen_##W##x##H##x16_rle16, W, H, RLE16 }
+    #define CUSTOM_BOOTSCREEN_CHOSEN(W,H) _CUSTOM_BOOTSCREEN_CHOSEN(W,H)
+  #endif
+#else
+  #define MARLIN_LOGO_CHOSEN(W,H) { (void *)marlin_logo_##W##x##H##x16, W, H, HIGHCOLOR }
+  #if ENABLED(SHOW_CUSTOM_BOOTSCREEN)
+    #define _CUSTOM_BOOTSCREEN_CHOSEN(W,H) { (void *)custom_bootscreen_##W##x##H##x16, W, H, HIGHCOLOR }
+    #define CUSTOM_BOOTSCREEN_CHOSEN(W,H) _CUSTOM_BOOTSCREEN_CHOSEN(W,H)
+  #endif
+#endif
 
 enum MarlinImage : uint8_t {
-  imgBootScreen = 0x00,
-  imgHotEnd,
-  imgBed,
-  imgBedHeated,
-  imgChamber,
-  imgChamberHeated,
-  imgFanIdle,
-  imgFanSlow0,
-  imgFanSlow1,
-  imgFanFast0,
-  imgFanFast1,
-  imgFeedRate,
-  imgFlowRate,
-  imgSD,
-  imgMenu,
-  imgSettings,
-  imgDirectory,
-  imgConfirm,
-  imgCancel,
-  imgIncrease,
-  imgDecrease,
-  imgBack,
-  imgUp,
-  imgDown,
-  imgLeft,
-  imgRight,
-  imgRefresh,
-  imgLeveling,
-  imgSlider,
-  imgHome,
-  imgBtn52Rounded,
+  imgCustomBoot = 0x00, // CUSTOM_BOOTSCREEN
+  imgBootScreen,        // BOOTSCREEN_LOGO / NoLogo
+  imgHotEnd,            // HotEnd_64x64x4
+  imgBed,               // Bed_64x64x4
+  imgBedHeated,         // Bed_Heated_64x64x4
+  imgChamber,           // Chamber_64x64x4
+  imgChamberHeated,     // Chamber_Heated_64x64x4
+  imgFanIdle,           // Fan0_64x64x4
+  imgFanSlow0,          // Fan_Slow0_64x64x4
+  imgFanSlow1,          // Fan_Slow1_64x64x4
+  imgFanFast0,          // Fan_Fast0_64x64x4
+  imgFanFast1,          // Fan_Fast1_64x64x4
+  imgFeedRate,          // Feedrate_32x32x4
+  imgFlowRate,          // Flowrate_32x32x4
+  imgSD,                // SD_64x64x4
+  imgMenu,              // Menu_64x64x4
+  imgSettings,          // Settings_64x64x4
+  imgDirectory,         // Directory_32x32x4
+  imgConfirm,           // Confirm_64x64x4
+  imgCancel,            // Cancel_64x64x4
+  imgIncrease,          // Increase_64x64x4
+  imgDecrease,          // Decrease_64x64x4
+  imgBack,              // Back_32x32x4
+  imgUp,                // Up_32x32x4
+  imgDown,              // Down_32x32x4
+  imgLeft,              // Left_32x32x4
+  imgRight,             // Right_32x32x4
+  imgRefresh,           // Refresh_32x32x4
+  imgLeveling,          // Leveling_32x32x4
+  imgSlider,            // Slider8x16x4
+  imgHome,              // Home_64x64x4
+  imgBtn52Rounded,      // BtnRounded_64x52x4
+  imgBtn39Rounded,      // BtnRounded_42x39x4
+  imgTimeElapsed,       // Time_Elapsed_32x32x4
+  imgTimeRemaining,     // Time_Remaining_32x32x4
+  #if ENABLED(NOVIN3DP_GALAXY_UI)
+    imgNOVINBIG,        // NOVINBIG_200x24x1
+  #endif
+  #if HAS_CUTTER
+    imgCutter,          // Cutter_64x64x4
+    imgCutterOn,        // Cutter_On_64x64x4
+  #endif
+  // Special values - must be at the end!
   imgCount,
   noImage = imgCount,
   imgPageUp = imgLeft,
@@ -107,11 +94,20 @@ enum colorMode_t : uint8_t {
   GREYSCALE2,         // 2 bits per pixel
   GREYSCALE4,         // 4 bits per pixel
   HIGHCOLOR           // 16 bits per pixel
+  #if ENABLED(COMPACT_MARLIN_BOOT_LOGO)
+    , RLE16           // RLE16 Compressed 16 bits per pixel row
+  #endif
 };
 
 typedef colorMode_t ColorMode;
 
-typedef struct __attribute__((__packed__)) {
+#ifdef __AVR__
+  #define IMG_PACKED __attribute__((__packed__))
+#else
+  #define IMG_PACKED
+#endif
+
+typedef struct IMG_PACKED {
   void *data;
   uint16_t width;
   uint16_t height;
@@ -120,12 +116,17 @@ typedef struct __attribute__((__packed__)) {
 
 extern const tImage NoLogo;
 
-extern const tImage MarlinLogo112x38x1;
-extern const tImage MarlinLogo228x255x2;
-extern const tImage MarlinLogo228x255x4;
-extern const tImage MarlinLogo195x59x16;
-extern const tImage MarlinLogo320x240x16;
-extern const tImage MarlinLogo480x320x16;
+#if ENABLED(SHOW_BOOTSCREEN)
+  extern const tImage MarlinLogo112x38x1;
+  extern const tImage MarlinLogo228x255x2;
+  extern const tImage MarlinLogo228x255x4;
+  extern const tImage MarlinLogo195x59x16;
+  extern const tImage MarlinLogo240x250x16;
+  extern const tImage MarlinLogo320x240x16;
+  extern const tImage MarlinLogo480x320x16;
+  extern const tImage MarlinLogo576x478x16;
+  extern const tImage MarlinLogo1024x600x16;
+#endif
 extern const tImage Background320x30x16;
 
 extern const tImage HotEnd_64x64x4;
@@ -142,6 +143,7 @@ extern const tImage Fan_Fast1_64x64x4;
 extern const tImage SD_64x64x4;
 extern const tImage Home_64x64x4;
 extern const tImage BtnRounded_64x52x4;
+extern const tImage BtnRounded_42x39x4;
 extern const tImage Menu_64x64x4;
 extern const tImage Settings_64x64x4;
 extern const tImage Confirm_64x64x4;
@@ -160,7 +162,14 @@ extern const tImage Left_32x32x4;
 extern const tImage Right_32x32x4;
 extern const tImage Refresh_32x32x4;
 extern const tImage Leveling_32x32x4;
+extern const tImage Time_Elapsed_32x32x4;
+extern const tImage Time_Remaining_32x32x4;
+extern const tImage NOVINBIG_200x24x1;
+#if HAS_CUTTER
+  extern const tImage Cutter_64x64x4;
+  extern const tImage Cutter_On_64x64x4;
+#endif
 
 extern const tImage Slider8x16x4;
 
-extern const tImage Images[imgCount];
+extern const tImage images[imgCount];

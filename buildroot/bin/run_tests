@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+#
+# buildroot/bin/run_tests
+# Used by Makefile tests-single-local, tests-single-ci, tests-all-local
+#
+# Usage:
+#  run_tests path target "[index|string]"
+#
+# With make:
+#  make tests-single-local TEST_TARGET=mega2560 ONLY_TEST=2
+#
+HERE="$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )"
+TESTS="$HERE/../tests"
+export PATH="$HERE:$TESTS:$PATH"
+
+get_desc() {
+  local file="$1"
+  awk '
+  /^# Test:/ { found=1; next }
+  found && /^#$/ { found=2; next }
+  found==2 && /^# / { print substr($0,3); exit }
+  ' "$file"
+}
+
+# exit on first failure
+set -e
+
+exec_test () {
+  printf "\n\033[0;32m[Test $2] \033[0m$3...\n"
+  if [[ -z "$VERBOSE_PLATFORMIO" ]] ; then
+    silent="--silent"
+  else
+    silent="-v"
+  fi
+  if platformio run --project-dir $1 -e $2 $silent; then
+    printf "\033[0;32mPassed\033[0m\n"
+    return 0
+  else
+    if [[ -n $GIT_RESET_HARD ]]; then
+      git reset --hard HEAD
+    else
+      restore_configs
+    fi
+    printf "\033[0;31mFailed!\033[0m\n"
+    return 1
+  fi
+}
+export -f exec_test
+
+printf "Running \033[0;32m$2\033[0m Tests\n"
+
+if [[ $2 = "ALL" ]]; then
+  tests=("$TESTS"/*)
+  for f in "${tests[@]}"; do
+    testenv=$(basename $f)
+    printf "Running \033[0;32m$f\033[0m Tests\n"
+    exec_test $1 "$testenv --target clean" "Setup Build Environment"
+    if [[ $GIT_RESET_HARD == "true" ]]; then
+      git reset --hard HEAD
+    else
+      restore_configs
+    fi
+  done
+else
+  exec_test $1 "$2 --target clean" "Setup Build Environment"
+  TEST_INDEX="$3"
+  if [[ -z "$TEST_INDEX" ]]; then
+    # Run all tests
+    for config_file in $(ls -1 "$TESTS/$2"/config-*.ini | sort -V); do
+      desc=$(get_desc "$config_file")
+      cp "$config_file" Marlin/config.ini
+      exec_test $1 $2 "$desc"
+      if [[ $GIT_RESET_HARD == "true" ]]; then
+        git reset --hard HEAD
+      else
+        restore_configs
+      fi
+    done
+  else
+    # Find the config file
+    if [[ "$TEST_INDEX" =~ ^[0-9][0-9]?$ ]]; then
+      config_file="$TESTS/$2/config-$(printf "%02d" $TEST_INDEX).ini"
+      desc=$(get_desc "$config_file")
+    else
+      # Find by name
+      desc="$TEST_INDEX"
+      config_file=""
+      for cf in $(ls -1 "$TESTS/$2"/config-*.ini | sort -V); do
+        if [[ "$(get_desc "$cf")" =~ "$desc" ]]; then
+          config_file="$cf"
+          break
+        fi
+      done
+    fi
+    if [[ -z "$config_file" || ! -f "$config_file" ]]; then
+      printf "\033[0;31mCould not find test '\033[0m$TEST_INDEX\033[0;31m' in \033[0mbuildroot/tests/$2\n"
+      exit 1
+    fi
+    cp "$config_file" Marlin/config.ini
+    exec_test $1 $2 "$desc"
+    if [[ $GIT_RESET_HARD == "true" ]]; then
+      git reset --hard HEAD
+    else
+      restore_configs
+    fi
+  fi
+fi
+printf "\033[0;32mAll tests completed successfully\033[0m\n"

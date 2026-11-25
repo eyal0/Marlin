@@ -1,7 +1,9 @@
 /**
  * Marlin 3D Printer Firmware
  * Copyright (c) 2020 MarlinFirmware [https://github.com/MarlinFirmware/Marlin]
- * Copyright (c) 2016 Bob Cousins bobcousins42@googlemail.com
+ *
+ * Based on Sprinter and grbl.
+ * Copyright (c) 2011 Camiel Gubbels / Erik van der Zalm
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,15 +34,14 @@
 #include "../shared/HAL_SPI.h"
 
 #include "fastio.h"
-#include "watchdog.h"
 #include "i2s.h"
 
 #if ENABLED(WIFISUPPORT)
-  #include "WebSocketSerial.h"
+  #include "wifi/WebSocketSerial.h"
 #endif
 
 #if ENABLED(ESP3D_WIFISUPPORT)
-  #include "esp3dlib.h"
+  #include <esp3dlib.h>
 #endif
 
 #include "FlushableHardwareSerial.h"
@@ -49,27 +50,78 @@
 // Defines
 // ------------------------
 
-extern portMUX_TYPE spinlock;
-
-#define MYSERIAL0 flushableSerial
-
-#if EITHER(WIFISUPPORT, ESP3D_WIFISUPPORT)
-  #if ENABLED(ESP3D_WIFISUPPORT)
-    #define MYSERIAL1 Serial2Socket
-  #else
-    #define MYSERIAL1 webSocketSerial
-  #endif
+#if HAS_BLUETOOTH_SERIAL
+  #include "BluetoothSerialPort.h"
 #endif
 
-#define CRITICAL_SECTION_START() portENTER_CRITICAL(&spinlock)
-#define CRITICAL_SECTION_END()   portEXIT_CRITICAL(&spinlock)
-#define ISRS_ENABLED() (spinlock.owner == portMUX_FREE_VAL)
-#define ENABLE_ISRS()  if (spinlock.owner != portMUX_FREE_VAL) portEXIT_CRITICAL(&spinlock)
-#define DISABLE_ISRS() portENTER_CRITICAL(&spinlock)
+#if HAS_NATIVE_USB_SERIAL
+  #include "NativeUSBSerial.h"
+#endif
 
-// Fix bug in pgm_read_ptr
-#undef pgm_read_ptr
-#define pgm_read_ptr(addr) (*(addr))
+// The WiFi serial port: G-code from ESP3D, or from the WebSocket at /ws
+#if ENABLED(ESP3D_WIFISUPPORT)
+  typedef ForwardSerial1Class< decltype(Serial2Socket) > DefaultSerial1;
+  extern DefaultSerial1 MSerial0;
+  #define WIFI_HOST_SERIAL MSerial0
+#elif ENABLED(WIFISUPPORT)
+  #define WIFI_HOST_SERIAL webSocketSerial
+#endif
+
+// Serial port -1 is the native USB port (ESP32-S2, ESP32-S3), -2 is Bluetooth (ESP32), -3 is the WiFi serial port
+#if SERIAL_PORT == -3
+  #define MYSERIAL1 WIFI_HOST_SERIAL
+#elif SERIAL_PORT == -2
+  #define MYSERIAL1 btSerial
+#elif SERIAL_PORT == -1
+  #define MYSERIAL1 nativeUSBSerial
+#else
+  #define MYSERIAL1 flushableSerial
+#endif
+
+#if SERIAL_PORT_2 == -3
+  #define MYSERIAL2 WIFI_HOST_SERIAL
+#elif SERIAL_PORT_2 == -2
+  #define MYSERIAL2 btSerial
+#elif SERIAL_PORT_2 == -1
+  #define MYSERIAL2 nativeUSBSerial
+#elif SERIAL_PORT_2 == 2
+  #define MYSERIAL2 flushableSerial2
+#endif
+
+#if SERIAL_PORT_3 == -3
+  #define MYSERIAL3 WIFI_HOST_SERIAL
+#elif SERIAL_PORT_3 == -2
+  #define MYSERIAL3 btSerial
+#elif SERIAL_PORT_3 == -1
+  #define MYSERIAL3 nativeUSBSerial
+#endif
+
+#if LCD_SERIAL_PORT == 2
+  #define LCD_SERIAL flushableSerial2
+  #define SERIAL_GET_TX_BUFFER_FREE() LCD_SERIAL.availableForWrite()
+#endif
+
+#define CRITICAL_SECTION_START() portENTER_CRITICAL(&hal.spinlock)
+#define CRITICAL_SECTION_END()   portEXIT_CRITICAL(&hal.spinlock)
+
+#define HAL_CAN_SET_PWM_FREQ   // This HAL supports PWM Frequency adjustment
+#define PWM_FREQUENCY  1000U   // Default PWM frequency when set_pwm_duty() is called without set_pwm_frequency()
+#define PWM_RESOLUTION   10U   // Default PWM bit resolution
+#if ESP32_CLASSIC
+  #define CHANNEL_MAX_NUM  15U   // max PWM channel # to allocate (7 to only use low speed, 15 to use low & high)
+  #define MAX_PWM_IOPIN    33U   // hardware pwm pins < 34
+#else
+  #include <soc/soc_caps.h>
+  #define CHANNEL_MAX_NUM  (SOC_LEDC_CHANNEL_NUM - 1U)  // max PWM channel # to allocate
+  #if CONFIG_IDF_TARGET_ESP32S2
+    #define MAX_PWM_IOPIN  45U                          // GPIO 46 is input only
+  #else
+    #define MAX_PWM_IOPIN  (SOC_GPIO_PIN_COUNT - 1U)    // all GPIOs can output PWM
+  #endif
+#endif
+#ifndef MAX_EXPANDER_BITS
+  #define MAX_EXPANDER_BITS 32 // I2S expander bit width (max 32)
+#endif
 
 // ------------------------
 // Types
@@ -77,65 +129,47 @@ extern portMUX_TYPE spinlock;
 
 typedef int16_t pin_t;
 
-#define HAL_SERVO_LIB Servo
+typedef struct pwm_pin {
+  uint32_t pwm_cycle_ticks = 1000000UL / (PWM_FREQUENCY) / 4; // # ticks per pwm cycle
+  uint32_t pwm_tick_count = 0;  // current tick count
+  uint32_t pwm_duty_ticks = 0;  // # of ticks for current duty cycle
+} pwm_pin_t;
 
-// ------------------------
-// Public Variables
-// ------------------------
-
-/** result of last ADC conversion */
-extern uint16_t HAL_adc_result;
+class Servo;
+typedef Servo hal_servo_t;
 
 // ------------------------
 // Public functions
 // ------------------------
 
-// clear reset reason
-void HAL_clear_reset_source();
+//
+// Tone
+//
+void tone(const pin_t _pin, const unsigned int frequency, const unsigned long duration=0);
+void noTone(const pin_t _pin);
+int8_t get_pwm_channel(const pin_t pin, const uint32_t freq, const uint16_t res);
+// Start a hardware serial port used by TMC drivers
+void tmc_hw_serial_begin(HardwareSerial &serial, const uint32_t baud);
+#define TMC_HW_SERIAL_BEGIN(S, B) tmc_hw_serial_begin(S, B)
 
-// reset reason
-uint8_t HAL_get_reset_source();
+void analogWrite(const pin_t pin, const uint16_t value, const uint32_t freq=PWM_FREQUENCY, const uint16_t res=8);
 
-inline void HAL_reboot() {}  // reboot the board or restart the bootloader
-
-void _delay_ms(int delay);
-
-#if GCC_VERSION <= 50000
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wunused-function"
+// M997 restarts the firmware
+#ifndef PLATFORM_M997_SUPPORT
+  #define PLATFORM_M997_SUPPORT
 #endif
+void flashFirmware(const int16_t);
 
-int freeMemory();
-
-#if GCC_VERSION <= 50000
-  #pragma GCC diagnostic pop
-#endif
-
-void analogWrite(pin_t pin, int value);
-
-// ADC
-#define HAL_ANALOG_SELECT(pin)
-
-void HAL_adc_init();
-
-#define HAL_ADC_VREF         3.3
-#define HAL_ADC_RESOLUTION  10
-#define HAL_START_ADC(pin)  HAL_adc_start_conversion(pin)
-#define HAL_READ_ADC()      HAL_adc_result
-#define HAL_ADC_READY()     true
-
-void HAL_adc_start_conversion(const uint8_t adc_pin);
-
+//
+// Pin Mapping for M42, M43, M226
+//
 #define GET_PIN_MAP_PIN(index) index
 #define GET_PIN_MAP_INDEX(pin) pin
 #define PARSED_PIN_INDEX(code, dval) parser.intval(code, dval)
 
-// Enable hooks into idle and setup for HAL
-#define HAL_IDLETASK 1
-#define BOARD_INIT() HAL_init_board();
-void HAL_idletask();
-void HAL_init();
-void HAL_init_board();
+#if ENABLED(USE_ESP32_EXIO)
+  void Write_EXIO(uint8_t IO, uint8_t v);
+#endif
 
 //
 // Delay in cycles (used by DELAY_NS / DELAY_US)
@@ -177,3 +211,102 @@ FORCE_INLINE static void DELAY_CYCLES(uint32_t x) {
   }
 
 }
+
+// ------------------------
+// Class Utilities
+// ------------------------
+
+#pragma GCC diagnostic push
+#if GCC_VERSION <= 50000
+  #pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
+int freeMemory();
+
+#pragma GCC diagnostic pop
+
+// ------------------------
+// MarlinHAL Class
+// ------------------------
+
+#define HAL_ADC_VREF_MV   3300
+#define HAL_ADC_RESOLUTION  10
+
+class MarlinHAL {
+public:
+
+  // Earliest possible init, before setup()
+  MarlinHAL() {}
+
+  // Watchdog
+  static void watchdog_init()    IF_DISABLED(USE_WATCHDOG, {});
+  static void watchdog_refresh() IF_DISABLED(USE_WATCHDOG, {});
+
+  static void init() {}        // Called early in setup()
+  static void init_board();    // Called less early in setup()
+  static void reboot();        // Restart the firmware
+
+  // Interrupts
+  static portMUX_TYPE spinlock;
+  #if CONFIG_FREERTOS_UNICORE
+    // A single-core build doesn't set the spinlock owner, so count the isr_off() calls
+    static volatile uint8_t isr_off_count;
+    static bool isr_state() { return !isr_off_count; }
+    static void isr_on()  { if (isr_off_count) { isr_off_count--; portEXIT_CRITICAL(&spinlock); } }
+    static void isr_off() { portENTER_CRITICAL(&spinlock); isr_off_count++; }
+  #else
+    static bool isr_state() { return spinlock.owner == portMUX_FREE_VAL; }
+    static void isr_on()  { if (spinlock.owner != portMUX_FREE_VAL) portEXIT_CRITICAL(&spinlock); }
+    static void isr_off() { portENTER_CRITICAL(&spinlock); }
+  #endif
+
+  static void delay_ms(const int ms) { delay(ms); }
+
+  // Tasks, called from marlin.idle()
+  static void idletask();
+
+  // Reset
+  static uint8_t get_reset_source();
+  static void clear_reset_source() {}
+
+  // Free SRAM
+  static int freeMemory();
+
+  static pwm_pin_t pwm_pin_data[MAX_EXPANDER_BITS];
+
+  //
+  // ADC Methods
+  //
+
+  static uint16_t adc_result;
+
+  // Called by Temperature::init once at startup
+  static void adc_init();
+
+  // Called by Temperature::init for each sensor at startup
+  static void adc_enable(const pin_t pin) {}
+
+  // Begin ADC sampling on the given pin. Called from Temperature::isr!
+  static void adc_start(const pin_t pin);
+
+  // Is the ADC ready for reading?
+  static bool adc_ready() { return true; }
+
+  // The current value of the ADC register
+  static uint16_t adc_value() { return adc_result; }
+
+  /**
+   * If not already allocated, allocate a hardware PWM channel
+   * to the pin and set the duty cycle..
+   * Optionally invert the duty cycle [default = false]
+   * Optionally change the scale of the provided value to enable finer PWM duty control [default = 255]
+   */
+  static void set_pwm_duty(const pin_t pin, const uint16_t v, const uint16_t v_size=255, const bool invert=false);
+
+  /**
+   * Allocate and set the frequency of a hardware PWM pin
+   * Returns -1 if no pin available.
+   */
+  static int8_t set_pwm_frequency(const pin_t pin, const uint32_t f_desired);
+
+};

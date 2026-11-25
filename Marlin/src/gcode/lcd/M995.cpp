@@ -26,8 +26,9 @@
 
 #include "../gcode.h"
 
-#if ENABLED(TFT_LVGL_UI)
-  #include "../../lcd/extui/lib/mks_ui/draw_touch_calibration.h"
+#if HAS_TFT_LVGL_UI
+  #include "../../lcd/extui/mks_ui/draw_touch_calibration.h"
+  #include "../../lcd/extui/mks_ui/draw_ui.h"
 #else
   #include "../../lcd/menu/menu.h"
 #endif
@@ -37,7 +38,8 @@
  */
 void GcodeSuite::M995() {
 
-  #if ENABLED(TFT_LVGL_UI)
+  #if HAS_TFT_LVGL_UI
+    clear_cur_ui();
     lv_draw_touch_calibration_screen();
   #else
     ui.goto_screen(touch_screen_calibration);

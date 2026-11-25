@@ -20,45 +20,76 @@
  *
  */
 
+#include "../../inc/MarlinConfigPre.h"
+
+#if HAS_SPI_TFT || HAS_FSMC_TFT || HAS_LTDC_TFT
+
 #include "tft_io.h"
+#include "tft_ids.h"
 
-#if HAS_SPI_TFT || HAS_FSMC_TFT
+#if TFT_DRIVER == ST7735 || TFT_DRIVER == AUTO
+  #include "st7735.h"
+#endif
+#if TFT_DRIVER == ST7789 || TFT_DRIVER == AUTO
+  #include "st7789v.h"
+#endif
+#if TFT_DRIVER == ST7796 || TFT_DRIVER == AUTO
+  #include "st7796s.h"
+#endif
+#if TFT_DRIVER == R61505 || TFT_DRIVER == AUTO
+  #include "r65105.h"
+#endif
+#if TFT_DRIVER == ILI9488 || TFT_DRIVER == ILI9488_ID1 || TFT_DRIVER == AUTO
+  #include "ili9488.h"
+#endif
+#if TFT_DRIVER == SSD1963 || TFT_DRIVER == AUTO
+  #include "ssd1963.h"
+#endif
 
-#include "st7735.h"
-#include "st7789v.h"
-#include "st7796s.h"
-#include "r65105.h"
-#include "ili9328.h"
 #include "ili9341.h"
-#include "ili9488.h"
-#include "ssd1963.h"
+#include "ili9328.h"
+
+#if HAS_LCD_BRIGHTNESS
+  #include "../marlinui.h"
+#endif
 
 #define DEBUG_OUT ENABLED(DEBUG_GRAPHICAL_TFT)
 #include "../../core/debug_out.h"
 
+#if ENABLED(TFT_BACKLIGHT_INVERT)
+  #define TFT_BL_ON  LOW    // Backlight enable passes through an inverting buffer
+  #define TFT_BL_OFF HIGH
+#else
+  #define TFT_BL_ON  HIGH
+  #define TFT_BL_OFF LOW
+#endif
+
 TFT_IO_DRIVER TFT_IO::io;
 uint32_t TFT_IO::lcd_id = 0xFFFFFFFF;
 
-void TFT_IO::InitTFT() {
-if (lcd_id != 0xFFFFFFFF) return;
+void TFT_IO::initTFT() {
+  if (lcd_id != 0xFFFFFFFF) return;
 
   #if PIN_EXISTS(TFT_BACKLIGHT)
-    OUT_WRITE(TFT_BACKLIGHT_PIN, LOW);
+    OUT_WRITE(TFT_BACKLIGHT_PIN, TFT_BL_OFF);
   #endif
 
   #if PIN_EXISTS(TFT_RESET)
     OUT_WRITE(TFT_RESET_PIN, HIGH);
     delay(10);
-    OUT_WRITE(TFT_RESET_PIN, LOW);
+    WRITE(TFT_RESET_PIN, LOW);
     delay(10);
-    OUT_WRITE(TFT_RESET_PIN, HIGH);
+    WRITE(TFT_RESET_PIN, HIGH);
   #endif
 
   #if PIN_EXISTS(TFT_BACKLIGHT)
-    OUT_WRITE(TFT_BACKLIGHT_PIN, DISABLED(DELAYED_BACKLIGHT_INIT));
+    WRITE(TFT_BACKLIGHT_PIN, TERN(DELAYED_BACKLIGHT_INIT, TFT_BL_OFF, TFT_BL_ON));
+    #if HAS_LCD_BRIGHTNESS && DISABLED(DELAYED_BACKLIGHT_INIT)
+      ui._set_brightness();
+    #endif
   #endif
 
-  // io.Init();
+  //io.init();
   delay(100);
 
   #if TFT_DRIVER != AUTO
@@ -81,69 +112,78 @@ if (lcd_id != 0xFFFFFFFF) return;
     write_esc_sequence(ili9341_init);
   #elif TFT_DRIVER == ILI9488
     write_esc_sequence(ili9488_init);
-  #elif TFT_DRIVER == LERDGE_ST7796
-    lcd_id = ST7796;
-    write_esc_sequence(lerdge_st7796s_init);
-
   #elif TFT_DRIVER == AUTO // autodetect
 
-    lcd_id = io.GetID() & 0xFFFF;
+    lcd_id = io.getID() & 0xFFFF;
 
     switch (lcd_id) {
-      case ST7796:    // ST7796S    480x320
-        DEBUG_ECHO_MSG(" ST7796S");
+      case LTDC_RGB:
+        break;
+      case ST7796:
+        DEBUG_ECHO_MSG(" ST7796S");       // 480x320
         write_esc_sequence(st7796s_init);
         break;
-      case ST7789:    // ST7789V    320x240
-        DEBUG_ECHO_MSG(" ST7789V");
+      case ST7789:
+        DEBUG_ECHO_MSG(" ST7789V");       // 320x240
         write_esc_sequence(st7789v_init);
         break;
-      case SSD1963:    // SSD1963
+      case SSD1963:
         DEBUG_ECHO_MSG(" SSD1963");
         write_esc_sequence(ssd1963_init);
         break;
-      case ST7735:    // ST7735     160x128
-        DEBUG_ECHO_MSG(" ST7735");
+      case ST7735:
+        DEBUG_ECHO_MSG(" ST7735");        // 160x128
         write_esc_sequence(st7735_init);
         break;
-      case R61505:    // R61505U    320x240
-        DEBUG_ECHO_MSG(" R61505U");
+      case R61505:
+        DEBUG_ECHO_MSG(" R61505U");       // 320x240
         write_esc_sequence(r61505_init);
         break;
-      case ILI9328:   // ILI9328    320x240
-        DEBUG_ECHO_MSG(" ILI9328");
+      case ILI9328:
+        DEBUG_ECHO_MSG(" ILI9328");       // 320x240
         write_esc_sequence(ili9328_init);
         break;
-      case ILI9341:   // ILI9341    320x240
-        DEBUG_ECHO_MSG(" ILI9341");
+      case ILI9341:
+        DEBUG_ECHO_MSG(" ILI9341");       // 320x240
         write_esc_sequence(ili9341_init);
         break;
-      case ILI9488:   // ILI9488    480x320
-      case ILI9488_ID1: // 0x8066 ILI9488    480x320
-        DEBUG_ECHO_MSG(" ILI9488");
+      case ILI9488:
+      case ILI9488_ID1:
+        DEBUG_ECHO_MSG(" ILI9488");       // 480x320
         write_esc_sequence(ili9488_init);
         break;
       default:
         lcd_id = 0;
     }
   #else
-    #error Unsupported TFT driver
+    #error "Unsupported TFT driver"
   #endif
 
   #if PIN_EXISTS(TFT_BACKLIGHT) && ENABLED(DELAYED_BACKLIGHT_INIT)
-    OUT_WRITE(TFT_BACKLIGHT_PIN, HIGH);
+    TERN(HAS_LCD_BRIGHTNESS, ui._set_brightness(), WRITE(TFT_BACKLIGHT_PIN, TFT_BL_ON));
   #endif
 }
 
-void TFT_IO::set_window(uint16_t Xmin, uint16_t Ymin, uint16_t Xmax, uint16_t Ymax) {
+void TFT_IO::set_window(uint16_t xMin, uint16_t yMin, uint16_t xMax, uint16_t yMax) {
   #ifdef OFFSET_X
-    Xmin += OFFSET_X; Xmax += OFFSET_X;
+    xMin += OFFSET_X; xMax += OFFSET_X;
   #endif
   #ifdef OFFSET_Y
-    Ymin += OFFSET_Y; Ymax += OFFSET_Y;
+    yMin += OFFSET_Y; yMax += OFFSET_Y;
   #endif
 
   switch (lcd_id) {
+    case LTDC_RGB:
+      io.writeReg(0x01);
+      io.writeData(xMin);
+      io.writeReg(0x02);
+      io.writeData(xMax);
+      io.writeReg(0x03);
+      io.writeData(yMin);
+      io.writeReg(0x04);
+      io.writeData(yMax);
+      io.writeReg(0x00);
+      break;
     case ST7735:    // ST7735     160x128
     case ST7789:    // ST7789V    320x240
     case ST7796:    // ST7796     480x320
@@ -151,76 +191,76 @@ void TFT_IO::set_window(uint16_t Xmin, uint16_t Ymin, uint16_t Xmax, uint16_t Ym
     case ILI9488:   // ILI9488    480x320
     case SSD1963:   // SSD1963
     case ILI9488_ID1: // 0x8066 ILI9488    480x320
-      io.DataTransferBegin(DATASIZE_8BIT);
+      io.dataTransferBegin(DATASIZE_8BIT);
 
       // CASET: Column Address Set
-      io.WriteReg(ILI9341_CASET);
-      io.WriteData((Xmin >> 8) & 0xFF);
-      io.WriteData(Xmin & 0xFF);
-      io.WriteData((Xmax >> 8) & 0xFF);
-      io.WriteData(Xmax & 0xFF);
+      io.writeReg(ILI9341_CASET);
+      io.writeData((xMin >> 8) & 0xFF);
+      io.writeData(xMin & 0xFF);
+      io.writeData((xMax >> 8) & 0xFF);
+      io.writeData(xMax & 0xFF);
 
       // RASET: Row Address Set
-      io.WriteReg(ILI9341_PASET);
-      io.WriteData((Ymin >> 8) & 0xFF);
-      io.WriteData(Ymin & 0xFF);
-      io.WriteData((Ymax >> 8) & 0xFF);
-      io.WriteData(Ymax & 0xFF);
+      io.writeReg(ILI9341_PASET);
+      io.writeData((yMin >> 8) & 0xFF);
+      io.writeData(yMin & 0xFF);
+      io.writeData((yMax >> 8) & 0xFF);
+      io.writeData(yMax & 0xFF);
 
       // RAMWR: Memory Write
-      io.WriteReg(ILI9341_RAMWR);
+      io.writeReg(ILI9341_RAMWR);
       break;
     case R61505:    // R61505U    320x240
     case ILI9328:   // ILI9328    320x240
-      io.DataTransferBegin(DATASIZE_16BIT);
+      io.dataTransferBegin(DATASIZE_16BIT);
 
       // Mind the mess: with landscape screen orientation 'Horizontal' is Y and 'Vertical' is X
-      io.WriteReg(ILI9328_HASTART);
-      io.WriteData(Ymin);
-      io.WriteReg(ILI9328_HAEND);
-      io.WriteData(Ymax);
-      io.WriteReg(ILI9328_VASTART);
-      io.WriteData(Xmin);
-      io.WriteReg(ILI9328_VAEND);
-      io.WriteData(Xmax);
+      io.writeReg(ILI9328_HASTART);
+      io.writeData(yMin);
+      io.writeReg(ILI9328_HAEND);
+      io.writeData(yMax);
+      io.writeReg(ILI9328_VASTART);
+      io.writeData(xMin);
+      io.writeReg(ILI9328_VAEND);
+      io.writeData(xMax);
 
-      io.WriteReg(ILI9328_HASET);
-      io.WriteData(Ymin);
-      io.WriteReg(ILI9328_VASET);
-      io.WriteData(Xmin);
+      io.writeReg(ILI9328_HASET);
+      io.writeData(yMin);
+      io.writeReg(ILI9328_VASET);
+      io.writeData(xMin);
 
-      io.WriteReg(ILI9328_RAMWR);
+      io.writeReg(ILI9328_RAMWR);
       break;
     default:
       break;
   }
 
-  io.DataTransferEnd();
+  io.dataTransferEnd();
 }
 
-void TFT_IO::write_esc_sequence(const uint16_t *Sequence) {
+void TFT_IO::write_esc_sequence(const uint16_t *sequence) {
   uint16_t dataWidth, data;
 
-  dataWidth = *Sequence++;
-  io.DataTransferBegin(dataWidth);
+  dataWidth = *sequence++;
+  io.dataTransferBegin(dataWidth);
 
   for (;;) {
-    data = *Sequence++;
+    data = *sequence++;
     if (data != 0xFFFF) {
-      io.WriteData(data);
+      io.writeData(data);
       continue;
     }
-    data = *Sequence++;
-    if (data == 0x7FFF) return;
+    data = *sequence++;
+    if (data == 0x7FFF) break;
     if (data == 0xFFFF)
-      io.WriteData(0xFFFF);
+      io.writeData(0xFFFF);
     else if (data & 0x8000)
       delay(data & 0x7FFF);
     else if ((data & 0xFF00) == 0)
-      io.WriteReg(data);
+      io.writeReg(data);
   }
 
-  io.DataTransferEnd();
+  io.dataTransferEnd();
 }
 
-#endif // HAS_SPI_TFT || HAS_FSMC_TFT
+#endif // HAS_SPI_TFT || HAS_FSMC_TFT || HAS_LTDC_TFT

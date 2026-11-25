@@ -71,8 +71,8 @@
 #define HEATER_0_PIN                          20
 //#define HEATER_1_PIN                        36
 #define HEATER_BED_PIN                        21
-#ifndef FAN_PIN
-  #define FAN_PIN                             22
+#ifndef FAN0_PIN
+  #define FAN0_PIN                            22
 #endif
 
 //
@@ -90,8 +90,8 @@
 // Misc. Functions
 //
 #define LED_PIN                               13
-//#define SOL1_PIN                            28
-//#define SDSS                                16  // 8
+//#define SOL0_PIN                            28
+//#define SD_SS_PIN                           16  // 8
 
 //
 // LCD / Controller
@@ -100,7 +100,7 @@
 /*
 #if HAS_WIRED_LCD
   #define LCD_PINS_RS                         40
-  #define LCD_PINS_ENABLE                     41
+  #define LCD_PINS_EN                         41
   #define LCD_PINS_D4                         42
   #define LCD_PINS_D5                         43
   #define LCD_PINS_D6                         44

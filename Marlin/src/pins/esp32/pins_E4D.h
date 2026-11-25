@@ -22,36 +22,30 @@
 #pragma once
 
 /**
- * E4d@Box  pin assignments
- * E4d@Box is a small factor 3D printer control board based on the ESP32 microcontroller for Laser, CNC and 3d printers
- * for more info check https://atbox.tech/ and join to Facebook page E4d@box.
+ * E4d@box pin assignments
+ *
+ * Small factor 3D printer control board based on the ESP32 microcontroller for Laser, CNC and 3D printers.
+ * More info at https://atbox.tech/ and the E4d@box Facebook page.
  */
 
-#if NOT_TARGET(ARDUINO_ARCH_ESP32)
-  #error "Oops! Select an ESP32 board in 'Tools > Board.'"
-#elif EXTRUDERS > 1 || E_STEPPERS > 1
-  #error "E4d@box only supports one E Stepper. Comment out this line to continue."
-#elif HOTENDS > 1
-  #error "E4d@box only supports one hotend / E-stepper. Comment out this line to continue."
+#include "env_validate.h"
+
+#if HAS_MULTI_HOTEND || E_STEPPERS > 1
+  #error "E4d@box only supports 1 hotend / E stepper."
 #endif
 
-#define BOARD_INFO_NAME       "E4D@BOX"
-#define BOARD_WEBSITE_URL     "github.com/Exilaus/E4d@box"
+#define BOARD_INFO_NAME       "E4d@box"
+#define BOARD_WEBSITE_URL     "github.com/exilaus/E4d-box-project"
 #define DEFAULT_MACHINE_NAME  BOARD_INFO_NAME
-
-//
-// Disable I2S stepper stream
-//
-#undef I2S_STEPPER_STREAM
 
 //
 // Redefine I2S for ESP32
 //
 #undef I2S_WS
-#define I2S_WS                                23
 #undef I2S_BCK
-#define I2S_BCK                               22
 #undef I2S_DATA
+#define I2S_WS                                23
+#define I2S_BCK                               22
 #define I2S_DATA                              21
 
 //
@@ -94,14 +88,14 @@
 // Heaters / Fans
 //
 #define HEATER_0_PIN                           2
-#define FAN_PIN                                0
+#define FAN0_PIN                               0
 #define HEATER_BED_PIN                        15
 
 //
-// MicroSD card on SPI
+// MicroSD card on VSPI (bus 3)
 //
-#define MOSI_PIN                              23
-#define MISO_PIN                              19
-#define SCK_PIN                               18
-#define SDSS                                   5
+#define SD_MOSI_PIN                           23
+#define SD_MISO_PIN                           19
+#define SD_SCK_PIN                            18
+#define SD_SS_PIN                              5
 #define USES_SHARED_SPI                           // SPI is shared by SD card with TMC SPI drivers

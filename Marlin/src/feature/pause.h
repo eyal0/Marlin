@@ -26,10 +26,6 @@
  * This may be combined with related G-codes if features are consolidated.
  */
 
-typedef struct {
-  float unload_length, load_length;
-} fil_change_settings_t;
-
 #include "../inc/MarlinConfigPre.h"
 
 #if ENABLED(ADVANCED_PAUSE_FEATURE)
@@ -48,18 +44,20 @@ enum PauseMessage : char {
   PAUSE_MESSAGE_PARKING,
   PAUSE_MESSAGE_CHANGING,
   PAUSE_MESSAGE_WAITING,
-  PAUSE_MESSAGE_UNLOAD,
   PAUSE_MESSAGE_INSERT,
   PAUSE_MESSAGE_LOAD,
+  PAUSE_MESSAGE_UNLOAD,
   PAUSE_MESSAGE_PURGE,
   PAUSE_MESSAGE_OPTION,
   PAUSE_MESSAGE_RESUME,
-  PAUSE_MESSAGE_STATUS,
   PAUSE_MESSAGE_HEAT,
-  PAUSE_MESSAGE_HEATING
+  PAUSE_MESSAGE_HEATING,
+  PAUSE_MESSAGE_STATUS,
+  PAUSE_MESSAGE_COUNT
 };
 
-#if HAS_LCD_MENU
+#if M600_PURGE_MORE_RESUMABLE
+  // Input methods can Purge More, Resume, or request input
   enum PauseMenuResponse : char {
     PAUSE_RESPONSE_WAIT_FOR,
     PAUSE_RESPONSE_EXTRUDE_MORE,
@@ -69,36 +67,76 @@ enum PauseMessage : char {
   extern PauseMode pause_mode;
 #endif
 
-extern fil_change_settings_t fc_settings[EXTRUDERS];
+typedef struct FilamentChangeSettings {
+  #if ENABLED(CONFIGURE_FILAMENT_CHANGE)
+    float load_length, unload_length;
+  #else
+    static constexpr float load_length = FILAMENT_CHANGE_FAST_LOAD_LENGTH,
+                           unload_length = FILAMENT_CHANGE_UNLOAD_LENGTH;
+  #endif
+} fil_change_settings_t;
 
-extern uint8_t did_pause_print;
-
-#if ENABLED(DUAL_X_CARRIAGE)
-  #define DXC_PARAMS , const int8_t DXC_ext=-1
-  #define DXC_ARGS   , const int8_t DXC_ext
-  #define DXC_PASS   , DXC_ext
-  #define DXC_SAY    , " dxc:", int(DXC_ext)
+#if ENABLED(CONFIGURE_FILAMENT_CHANGE)
+  extern fil_change_settings_t fc_settings[EXTRUDERS];
 #else
-  #define DXC_PARAMS
-  #define DXC_ARGS
-  #define DXC_PASS
-  #define DXC_SAY
+  constexpr fil_change_settings_t fc_settings[EXTRUDERS];
 #endif
 
-bool pause_print(const float &retract, const xyz_pos_t &park_point, const float &unload_length=0, const bool show_lcd=false DXC_PARAMS);
+extern uint8_t paused_for_filament_change;
 
-void wait_for_confirmation(const bool is_reload=false, const int8_t max_beep_count=0 DXC_PARAMS);
+#define DXC_PARAMS OPTARG(DUAL_X_CARRIAGE, const int8_t DXC_ext=-1)
+#define DXC_ARGS   OPTARG(DUAL_X_CARRIAGE, const int8_t DXC_ext)
+#define DXC_PASS   OPTARG(DUAL_X_CARRIAGE, DXC_ext)
+#define DXC_SAY    OPTARG(DUAL_X_CARRIAGE, " dxc:", int(DXC_ext))
 
-void resume_print(const float &slow_load_length=0, const float &fast_load_length=0, const float &extrude_length=ADVANCED_PAUSE_PURGE_LENGTH,
-                    const int8_t max_beep_count=0, int16_t targetTemp=0 DXC_PARAMS);
+// Pause the print. If unload_length is set, do a Filament Unload
+bool pause_print(
+  const float     retract,                                    // (mm) Retraction length
+  const xyz_pos_t &park_point,                                // Parking XY Position and Z Raise
+  const bool      show_lcd=false,                             // Set LCD status messages?
+  const float     unload_length=0                             // (mm) Filament Change Unload Length - 0 to skip
+  DXC_PARAMS                                                  // Dual-X-Carriage extruder index
+);
 
-bool load_filament(const float &slow_load_length=0, const float &fast_load_length=0, const float &extrude_length=0, const int8_t max_beep_count=0,
-                    const bool show_lcd=false, const bool pause_for_user=false, const PauseMode mode=PAUSE_MODE_PAUSE_PRINT DXC_PARAMS);
+void wait_for_confirmation(
+  const bool      is_reload=false,                            // Reload Filament? (otherwise Resume Print)
+  const int8_t    max_beep_count=0                            // Beep alert for attention
+  DXC_PARAMS                                                  // Dual-X-Carriage extruder index
+);
 
-bool unload_filament(const float &unload_length, const bool show_lcd=false, const PauseMode mode=PAUSE_MODE_PAUSE_PRINT
-  #if BOTH(FILAMENT_UNLOAD_ALL_EXTRUDERS, MIXING_EXTRUDER)
-    , const float &mix_multiplier=1.0
+void resume_print(
+  const float     slow_load_length=0,                         // (mm) Slow Load Length for finishing move
+  const float     fast_load_length=0,                         // (mm) Fast Load Length for initial move
+  const float     purge_length=ADVANCED_PAUSE_PURGE_LENGTH,   // (mm) Purge length
+  const int8_t    max_beep_count=0,                           // Beep alert for attention
+  const celsius_t targetTemp=0,                               // (°C) A target temperature for the hotend
+  const bool      show_lcd=true,                              // Set LCD status messages?
+  const bool      pause_for_user=false                        // Pause for user before returning?
+  DXC_PARAMS                                                  // Dual-X-Carriage extruder index
+);
+
+bool load_filament(
+  const float     slow_load_length=0,                         // (mm) Slow Load Length for finishing move
+  const float     fast_load_length=0,                         // (mm) Fast Load Length for initial move
+  const float     purge_length=0,                             // (mm) Purge length
+  const int8_t    max_beep_count=0,                           // Beep alert for attention
+  const bool      show_lcd=false,                             // Set LCD status messages?
+  const bool      pause_for_user=false,                       // Pause for user before returning?
+  const PauseMode mode=PAUSE_MODE_PAUSE_PRINT                 // Pause Mode to apply
+  DXC_PARAMS                                                  // Dual-X-Carriage extruder index
+);
+
+bool unload_filament(
+  const float     unload_length,                              // (mm) Filament Unload Length - 0 to skip
+  const bool      show_lcd=false,                             // Set LCD status messages?
+  const PauseMode mode=PAUSE_MODE_PAUSE_PRINT                 // Pause Mode to apply
+  #if ALL(FILAMENT_UNLOAD_ALL_EXTRUDERS, MIXING_EXTRUDER)
+    , const float mix_multiplier=1.0f                         // Extrusion multiplier (for a Mixing Extruder)
   #endif
 );
 
-#endif // ADVANCED_PAUSE_FEATURE
+#else // !ADVANCED_PAUSE_FEATURE
+
+  constexpr uint8_t paused_for_filament_change = 0;
+
+#endif // !ADVANCED_PAUSE_FEATURE

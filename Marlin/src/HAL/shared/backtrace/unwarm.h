@@ -4,7 +4,7 @@
  * This program is PUBLIC DOMAIN.
  * This means that there is no copyright and anyone is able to take a copy
  * for free and use it as they wish, with or without modifications, and in
- * any context, commerically or otherwise. The only limitation is that I
+ * any context, commercially or otherwise. The only limitation is that I
  * don't guarantee that the software is fit for any purpose or accept any
  * liability for its use or misuse - this software is without warranty.
  ***************************************************************************
@@ -15,7 +15,7 @@
 
 #include "unwinder.h"
 
-/** The maximum number of instructions to interpet in a function.
+/** The maximum number of instructions to interpret in a function.
  * Unwinding will be unconditionally stopped and UNWIND_EXHAUSTED returned
  * if more than this number of instructions are interpreted in a single
  * function without unwinding a stack frame.  This prevents infinite loops
@@ -41,7 +41,6 @@ typedef enum {
   REG_VAL_ARITHMETIC  = 0x80
 } RegValOrigin;
 
-
 /** Type for tracking information about a register.
  * This stores the register value, as well as other data that helps unwinding.
  */
@@ -55,7 +54,6 @@ typedef struct {
    */
   int o; /* (RegValOrigin) */
 } RegData;
-
 
 /** Structure used to track reads and writes to memory.
  * This structure is used as a hash to store a small number of writes
@@ -80,7 +78,6 @@ typedef struct {
    */
   uint8_t tracked[(MEM_HASH_SIZE + 7) / 8];
 } MemData;
-
 
 /** Structure that is used to keep track of unwinding meta-data.
  * This data is passed between all the unwinding functions.

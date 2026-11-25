@@ -40,10 +40,6 @@
  * SPI sharing pins. The SCK, MOSI & MISO pins can NOT be set/cleared with
  * WRITE nor digitalWrite when the hardware SPI module within the LPC17xx is
  * active. If any of these pins are shared then the software SPI must be used.
- *
- * A more sophisticated hardware SPI can be found at the following link.
- * This implementation has not been fully debugged.
- * https://github.com/MarlinFirmware/Marlin/tree/071c7a78f27078fd4aee9a3ef365fcf5e143531e
  */
 
 #ifdef TARGET_LPC1768
@@ -55,27 +51,29 @@
 #include <lpc17xx_pinsel.h>
 #include <lpc17xx_clkpwr.h>
 
+#include "../shared/HAL_SPI.h"
+
 // ------------------------
 // Public functions
 // ------------------------
-#if ENABLED(LPC_SOFTWARE_SPI)
-
-  #include <SoftwareSPI.h>
+#if ENABLED(SOFTWARE_SPI)
 
   // Software SPI
 
-  static uint8_t SPI_speed = 0;
+  #include <SoftwareSPI.h>
+
+  static uint8_t SPI_speed = SPI_FULL_SPEED;
 
   static uint8_t spiTransfer(uint8_t b) {
-    return swSpiTransfer(b, SPI_speed, SCK_PIN, MISO_PIN, MOSI_PIN);
+    return swSpiTransfer(b, SPI_speed, SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
   }
 
   void spiBegin() {
-    swSpiBegin(SCK_PIN, MISO_PIN, MOSI_PIN);
+    swSpiBegin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
   }
 
   void spiInit(uint8_t spiRate) {
-    SPI_speed = swSpiInit(spiRate, SCK_PIN, MOSI_PIN);
+    SPI_speed = swSpiInit(spiRate, SD_SCK_PIN, SD_MOSI_PIN);
   }
 
   uint8_t spiRec() { return spiTransfer(0xFF); }
@@ -87,12 +85,12 @@
 
   void spiSend(uint8_t b) { (void)spiTransfer(b); }
 
-  void spiSend(const uint8_t* buf, size_t nbyte) {
+  void spiSend(const uint8_t *buf, size_t nbyte) {
     for (uint16_t i = 0; i < nbyte; i++)
       (void)spiTransfer(buf[i]);
   }
 
-  void spiSendBlock(uint8_t token, const uint8_t* buf) {
+  void spiSendBlock(uint8_t token, const uint8_t *buf) {
     (void)spiTransfer(token);
     for (uint16_t i = 0; i < 512; i++)
       (void)spiTransfer(buf[i]);
@@ -100,14 +98,18 @@
 
 #else
 
-  void spiBegin() {  // setup SCK, MOSI & MISO pins for SSP0
-    spiInit(SPI_SPEED);
-  }
+  #ifdef SD_SPI_SPEED
+    #define INIT_SPI_SPEED SD_SPI_SPEED
+  #else
+    #define INIT_SPI_SPEED SPI_FULL_SPEED
+  #endif
+
+  void spiBegin() { spiInit(INIT_SPI_SPEED); } // Set up SCK, MOSI & MISO pins for SSP0
 
   void spiInit(uint8_t spiRate) {
-    #if MISO_PIN == BOARD_SPI1_MISO_PIN
+    #if SD_MISO_PIN == BOARD_SPI1_MISO_PIN
       SPI.setModule(1);
-    #elif MISO_PIN == BOARD_SPI2_MISO_PIN
+    #elif SD_MISO_PIN == BOARD_SPI2_MISO_PIN
       SPI.setModule(2);
     #endif
     SPI.setDataSize(DATA_SIZE_8BIT);
@@ -123,13 +125,13 @@
 
   void spiSend(uint8_t b) { doio(b); }
 
-  void spiSend(const uint8_t* buf, size_t nbyte) {
+  void spiSend(const uint8_t *buf, size_t nbyte) {
     for (uint16_t i = 0; i < nbyte; i++) doio(buf[i]);
   }
 
   void spiSend(uint32_t chan, byte b) {}
 
-  void spiSend(uint32_t chan, const uint8_t* buf, size_t nbyte) {}
+  void spiSend(uint32_t chan, const uint8_t *buf, size_t nbyte) {}
 
   // Read single byte from SPI
   uint8_t spiRec() { return doio(0xFF); }
@@ -144,19 +146,18 @@
   uint8_t spiTransfer(uint8_t b) { return doio(b); }
 
   // Write from buffer to SPI
-  void spiSendBlock(uint8_t token, const uint8_t* buf) {
+  void spiSendBlock(uint8_t token, const uint8_t *buf) {
    (void)spiTransfer(token);
     for (uint16_t i = 0; i < 512; i++)
       (void)spiTransfer(buf[i]);
   }
 
-  /** Begin SPI transaction, set clock, bit order, data mode */
+  // Begin SPI transaction, set clock, bit order, data mode
   void spiBeginTransaction(uint32_t spiClock, uint8_t bitOrder, uint8_t dataMode) {
-    // TODO: to be implemented
-
+    // TODO: Implement this method
   }
 
-#endif // LPC_SOFTWARE_SPI
+#endif // SOFTWARE_SPI
 
 /**
  * @brief Wait until TXE (tx empty) flag is set and BSY (busy) flag unset.
@@ -313,8 +314,16 @@ void SPIClass::dmaSend(void *buf, uint16_t length, bool minc) {
   // Enable DMA
   GPDMA_ChannelCmd(0, ENABLE);
 
+  /**
+   * Observed behaviour on normal data transfer completion (SKR 1.3 board / LPC1768 MCU)
+   *   GPDMA_STAT_INTTC flag is SET
+   *   GPDMA_STAT_INTERR flag is NOT SET
+   *   GPDMA_STAT_RAWINTTC flag is NOT SET
+   *   GPDMA_STAT_RAWINTERR flag is SET
+   */
+
   // Wait for data transfer
-  while (!GPDMA_IntGetStatus(GPDMA_STAT_RAWINTTC, 0) && !GPDMA_IntGetStatus(GPDMA_STAT_RAWINTERR, 0)) { }
+  while (!GPDMA_IntGetStatus(GPDMA_STAT_INTTC, 0) && !GPDMA_IntGetStatus(GPDMA_STAT_INTERR, 0)) {}
 
   // Clear err and int
   GPDMA_ClearIntPending (GPDMA_STATCLR_INTTC, 0);
@@ -326,6 +335,43 @@ void SPIClass::dmaSend(void *buf, uint16_t length, bool minc) {
   waitSpiTxEnd(_currentSetting->spi_d);
 
   SSP_DMACmd(_currentSetting->spi_d, SSP_DMA_TX, DISABLE);
+}
+
+void SPIClass::dmaSendAsync(void *buf, uint16_t length, bool minc) {
+  //TODO: LPC dma can only write 0xFFF bytes at once.
+  GPDMA_Channel_CFG_Type GPDMACfg;
+
+  /* Configure GPDMA channel 0 -------------------------------------------------------------*/
+  /* DMA Channel 0 */
+  GPDMACfg.ChannelNum = 0;
+  // Source memory
+  GPDMACfg.SrcMemAddr = (uint32_t)buf;
+  // Destination memory - Not used
+  GPDMACfg.DstMemAddr = 0;
+  // Transfer size
+  GPDMACfg.TransferSize = length;
+  // Transfer width
+  GPDMACfg.TransferWidth = (_currentSetting->dataSize == DATA_SIZE_16BIT) ? GPDMA_WIDTH_HALFWORD : GPDMA_WIDTH_BYTE;
+  // Transfer type
+  GPDMACfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
+  // Source connection - unused
+  GPDMACfg.SrcConn = 0;
+  // Destination connection
+  GPDMACfg.DstConn = (_currentSetting->spi_d == LPC_SSP0) ? GPDMA_CONN_SSP0_Tx : GPDMA_CONN_SSP1_Tx;
+
+  GPDMACfg.DMALLI = 0;
+
+  // Enable dma on SPI
+  SSP_DMACmd(_currentSetting->spi_d, SSP_DMA_TX, ENABLE);
+
+  // Only increase memory if minc is true
+  GPDMACfg.MemoryIncrease = (minc ? GPDMA_DMACCxControl_SI : 0);
+
+  // Setup channel with given parameter
+  GPDMA_Setup(&GPDMACfg);
+
+  // Enable DMA
+  GPDMA_ChannelCmd(0, ENABLE);
 }
 
 uint16_t SPIClass::read() {
@@ -392,9 +438,9 @@ void SPIClass::updateSettings() {
   SSP_Init(_currentSetting->spi_d, &HW_SPI_init);  // puts the values into the proper bits in the SSP0 registers
 }
 
-#if MISO_PIN == BOARD_SPI1_MISO_PIN
+#if SD_MISO_PIN == BOARD_SPI1_MISO_PIN
   SPIClass SPI(1);
-#elif MISO_PIN == BOARD_SPI2_MISO_PIN
+#elif SD_MISO_PIN == BOARD_SPI2_MISO_PIN
   SPIClass SPI(2);
 #endif
 

@@ -31,14 +31,17 @@
 
 #if NOT_TARGET(__STM32F1__, STM32F1xx)
   #error "Oops! Select an STM32F1 board in 'Tools > Board.'"
-#elif HOTENDS > 1 || E_STEPPERS > 1
-  #error "FLSUN HiSpeedV1 supports 1 hotend / E-stepper. Comment out this line to continue."
+#elif HAS_MULTI_HOTEND || E_STEPPERS > 1
+  #error "FLSUN HiSpeedV1 only supports 1 hotend / E stepper."
 #endif
 
 #define BOARD_INFO_NAME      "FLSun HiSpeedV1"
 #define BOARD_WEBSITE_URL    "github.com/Foxies-CSTL"
 
 #define BOARD_NO_NATIVE_USB
+
+// Avoid conflict with TIMER_SERVO when using the STM32 HAL
+#define TEMP_TIMER                             5
 
 //
 // Release PB4 (Y_ENABLE_PIN) from JTAG NRST role
@@ -48,29 +51,35 @@
 //
 // EEPROM
 //
-#if EITHER(NO_EEPROM_SELECTED, FLASH_EEPROM_EMULATION)
+#if SHALL_USE_EEPROM(FLASH_EEPROM_EMULATION)
   #define FLASH_EEPROM_EMULATION
-  #define EEPROM_PAGE_SIZE     (0x800U)           // 2KB
+  #define EEPROM_PAGE_SIZE                0x800U  // 2K
   #define EEPROM_START_ADDRESS (0x8000000UL + (STM32_FLASH_SIZE) * 1024UL - (EEPROM_PAGE_SIZE) * 2UL)
-  #define MARLIN_EEPROM_SIZE    EEPROM_PAGE_SIZE  // 2KB
+  #define MARLIN_EEPROM_SIZE    EEPROM_PAGE_SIZE  // 2K
 #endif
 
 //
 // SPI
-// Note: FLSun Hispeed (clone MKS_Robin_miniV2) board is using SPI2 interface.
 //
-#define SPI_DEVICE 2
+#define SPI_DEVICE                             2  // Maple
 
+//
+// SD Card SPI
+//
+#define SD_SCK_PIN                          PB13  // SPI2
+#define SD_MISO_PIN                         PB14  // SPI2
+#define SD_MOSI_PIN                         PB15  // SPI2
+
+//
 // SPI Flash
-#define HAS_SPI_FLASH                          1
-#define SPI_FLASH_SIZE                 0x1000000  // 16MB
-
-#if HAS_SPI_FLASH
-  // SPI 2
-  #define W25QXX_CS_PIN                     PB12  // SPI2_NSS / Flash chip-select
-  #define W25QXX_MOSI_PIN                   PB15
-  #define W25QXX_MISO_PIN                   PB14
-  #define W25QXX_SCK_PIN                    PB13
+//
+#define SPI_FLASH
+#if ENABLED(SPI_FLASH)
+  #define SPI_FLASH_SIZE               0x1000000  // 16MB
+  #define SPI_FLASH_CS_PIN                  PB12  // SPI2_NSS / Flash chip-select
+  #define SPI_FLASH_SCK_PIN                 PB13
+  #define SPI_FLASH_MISO_PIN                PB14
+  #define SPI_FLASH_MOSI_PIN                PB15
 #endif
 
 //
@@ -85,10 +94,6 @@
 #define Y_STOP_PIN                          PA12  // -Y
 #define Z_MIN_PIN                           PA11  // -Z
 #define Z_MAX_PIN                           PC4   // +Z
-
-#ifndef FIL_RUNOUT_PIN
-  #define FIL_RUNOUT_PIN            MT_DET_1_PIN
-#endif
 
 //
 // Steppers
@@ -112,22 +117,17 @@
 /**
  * FLSUN Hi-Speed has no hard-wired UART pins for TMC drivers.
  * Several wiring options are provided below, defaulting to
- * to the most compatible.
+ * the most compatible.
  */
-
-//
-// Drivers
-//
-#if HAS_TMC220x
+#if HAS_TMC_UART
   // SoftwareSerial with one pin per driver
-  // Compatible with TMC2208 and TMC2209 drivers
+  // Compatible with TMC2208/TMC2209 drivers
   #define X_SERIAL_TX_PIN                   PA10  // RXD1
-  #define X_SERIAL_RX_PIN                   PA10  // RXD1
   #define Y_SERIAL_TX_PIN                   PA9   // TXD1
-  #define Y_SERIAL_RX_PIN                   PA9   // TXD1
   #define Z_SERIAL_TX_PIN                   PC7   // IO1
-  #define Z_SERIAL_RX_PIN                   PC7   // IO1
-  #define TMC_BAUD_RATE                   19200
+  #ifndef TMC_BAUD_RATE
+    #define TMC_BAUD_RATE                  19200
+  #endif
 #else
   // Motor current PWM pins
   #define MOTOR_CURRENT_PWM_XY_PIN          PA6   // VREF2/3 CONTROL XY
@@ -137,36 +137,36 @@
     #define DEFAULT_PWM_MOTOR_CURRENT { 800, 800, 800 }
   #endif
 
-/**
- * MKS Robin_Wifi or another ESP8266 module
- *
- *      __ESP(M1)__       -J1-
- *  GND| 15 | | 08 |+3v3  (22)  RXD1      (PA10)
- *     | 16 | | 07 |MOSI  (21)  TXD1      (PA9)   Active LOW, probably OK to leave floating
- *  IO2| 17 | | 06 |MISO  (19)  IO1       (PC7)   Leave as unused (ESP3D software configures this with a pullup so OK to leave as floating)
- *  IO0| 18 | | 05 |CLK   (18)  IO0       (PA8)   Must be HIGH (ESP3D software configures this with a pullup so OK to leave as floating)
- *  IO1| 19 | | 03 |EN    (03)  WIFI_EN           Must be HIGH for module to run
- *     | nc | | nc |      (01)  WIFI_CTRL (PA5)
- *   RX| 21 | | nc |
- *   TX| 22 | | 01 |RST
- *       ￣￣ AE￣￣
- */
-  // Module ESP-WIFI
-  #define ESP_WIFI_MODULE_COM                  2  // Must also set either SERIAL_PORT or SERIAL_PORT_2 to this
-  #define ESP_WIFI_MODULE_BAUDRATE      BAUDRATE  // Must use same BAUDRATE as SERIAL_PORT & SERIAL_PORT_2
-  #define ESP_WIFI_MODULE_RESET_PIN         PA5   // WIFI CTRL/RST
-  #define ESP_WIFI_MODULE_ENABLE_PIN        -1
-  #define ESP_WIFI_MODULE_TXD_PIN           PA9   // MKS or ESP WIFI RX PIN
-  #define ESP_WIFI_MODULE_RXD_PIN           PA10  // MKS or ESP WIFI TX PIN
+  #if ENABLED(WIFISUPPORT)
+    /**
+     * MKS Robin_Wifi or another ESP8266 module
+     *
+     *      __ESP(M1)__       -J1-
+     *  GND| 15 | | 08 |+3v3  (22)  RXD1      (PA10)
+     *     | 16 | | 07 |MOSI  (21)  TXD1      (PA9)   Active LOW, probably OK to leave floating
+     *  IO2| 17 | | 06 |MISO  (19)  IO1       (PC7)   Leave as unused (ESP3D software configures this with a pullup so OK to leave as floating)
+     *  IO0| 18 | | 05 |CLK   (18)  IO0       (PA8)   Must be HIGH (ESP3D software configures this with a pullup so OK to leave as floating)
+     *  IO1| 19 | | 03 |EN    (03)  WIFI_EN           Must be HIGH for module to run
+     *     | nc | | nc |      (01)  WIFI_CTRL (PA5)
+     *   RX| 21 | | nc |
+     *   TX| 22 | | 01 |RST
+     *       ￣￣ AE￣￣
+     */
+    // Module ESP-WIFI
+    #define ESP_WIFI_MODULE_COM                2  // Must also set either SERIAL_PORT or SERIAL_PORT_2 to this
+    #define ESP_WIFI_MODULE_BAUDRATE    BAUDRATE  // Must use same BAUDRATE as SERIAL_PORT & SERIAL_PORT_2
+    #define ESP_WIFI_MODULE_RESET_PIN       PA5   // WIFI CTRL/RST
+    #define ESP_WIFI_MODULE_ENABLE_PIN      -1
+    #define ESP_WIFI_MODULE_TXD_PIN         PA9   // MKS or ESP WIFI RX PIN
+    #define ESP_WIFI_MODULE_RXD_PIN         PA10  // MKS or ESP WIFI TX PIN
+  #endif
 #endif
 
 //
 // EXTRUDER
 //
-#if AXIS_DRIVER_TYPE_E0(TMC2208) || AXIS_DRIVER_TYPE_E0(TMC2209)
+#if AXIS_HAS_UART(E0)
   #define E0_SERIAL_TX_PIN                  PA8   // IO0
-  #define E0_SERIAL_RX_PIN                  PA8   // IO0
-  #define TMC_BAUD_RATE                    19200
 #else
   // Motor current PWM pins
   #define MOTOR_CURRENT_PWM_E_PIN           PB0   // VREF1 CONTROL E
@@ -188,14 +188,15 @@
 #define HEATER_0_PIN                        PC3   // HEATER_E0
 #define HEATER_BED_PIN                      PA0   // HEATER_BED-WKUP
 
-#define FAN_PIN                             PB1   // E_FAN
+#define FAN0_PIN                            PB1   // E_FAN
 
 //
 // Misc. Functions
 //
-//#define POWER_LOSS_PIN                    PA1   // PW_SO
 #if ENABLED(BACKUP_POWER_SUPPLY)
   #define POWER_LOSS_PIN                    PA2   // PW_DET (UPS) MKSPWC
+#else
+  //#define POWER_LOSS_PIN                  PA1   // PW_SO
 #endif
 
 /**
@@ -208,20 +209,26 @@
  */
 //#define SW_DIO                            PA13
 //#define SW_CLK                            PA14
-//#define SW_RST                            NRST   // (14)
+//#define SW_RST                            NRST  // (14)
 
 //
 // Power Supply Control
 //
 #if ENABLED(PSU_CONTROL)
   #define KILL_PIN                          PA2   // PW_DET
-  #define KILL_PIN_INVERTING                true
+  #define KILL_PIN_STATE                    HIGH
   //#define PS_ON_PIN                       PA3   // PW_CN /PW_OFF
 #endif
 
-#define MT_DET_1_PIN                        PA4   // MT_DET
-#define MT_DET_2_PIN                        PE6   // FALA_CRTL
-#define MT_DET_PIN_INVERTING               false
+#ifndef FIL_RUNOUT_PIN
+  #define FIL_RUNOUT_PIN                    PA4   // MT_DET_1
+#endif
+#ifndef FIL_RUNOUT2_PIN
+  #define FIL_RUNOUT2_PIN                   PE6   // MT_DET_2
+#endif
+#ifndef FIL_RUNOUT_STATE
+  #define FIL_RUNOUT_STATE                LOW
+#endif
 
 //
 // LED / NEOPixel
@@ -230,8 +237,8 @@
 
 #if ENABLED(NEOPIXEL_LED)
   #define LED_PWM                           PC7   // IO1
-  #ifndef NEOPIXEL_PIN
-    #define NEOPIXEL_PIN                 LED_PWM  // USED WIFI IO0/IO1 PIN
+  #ifndef BOARD_NEOPIXEL_PIN
+    #define BOARD_NEOPIXEL_PIN           LED_PWM  // USED WIFI IO0/IO1 PIN
   #endif
 #endif
 
@@ -244,13 +251,12 @@
 
 // Use the on-board card socket labeled SD_Extender
 #if SD_CONNECTION_IS(CUSTOM_CABLE)
-  #define SCK_PIN                           PC12
-  #define MISO_PIN                          PC8
-  #define MOSI_PIN                          PD2
-  #define SS_PIN                            -1
+  #define SD_SCK_PIN                        PC12
+  #define SD_MISO_PIN                       PC8
+  #define SD_MOSI_PIN                       PD2
   #define SD_DETECT_PIN                     PD12  // SD_CD (if -1 no detection)
 #else
-  #define SDIO_SUPPORT
+  #define ONBOARD_SDIO
   #define SDIO_CLOCK                     4500000  // 4.5 MHz
   #define SDIO_READ_RETRIES                   16
   #define ONBOARD_SPI_DEVICE                   1  // SPI1
@@ -261,6 +267,7 @@
 //
 // LCD / Controller
 //
+
 #ifndef BEEPER_PIN
   #define BEEPER_PIN                        PC5
 #endif
@@ -269,43 +276,45 @@
   #error "FLSun HiSpeed default BEEPER_PIN is not a SPEAKER."
 #endif
 
-/**
- * Note: MKS Robin TFT screens use various TFT controllers
- * Supported screens are based on the ILI9341, ST7789V and ILI9328 (320x240)
- * ILI9488 is not supported
- * Define init sequences for other screens in u8g_dev_tft_320x240_upscale_from_128x64.cpp
- *
- * If the screen stays white, disable 'LCD_RESET_PIN'
- * to let the bootloader init the screen.
- *
- * Setting an 'LCD_RESET_PIN' may cause a flicker when entering the LCD menu
- * because Marlin uses the reset as a failsafe to revive a glitchy LCD.
- */
-
-// QQS-Pro uses MKS Robin TFT v2.0 320x240
-
-// Shared FSMC Configs
+//
+// TFT with FSMC interface
+//
 #if HAS_FSMC_TFT
-  #define DOGLCD_MOSI                       -1    // Prevent auto-define by Conditionals_post.h
-  #define DOGLCD_SCK                        -1
-
-  #define FSMC_CS_PIN                       PD7   // NE4
-  #define FSMC_RS_PIN                       PD11  // A0
-
-  #define TFT_RESET_PIN                     PC6   // FSMC_RST
+  /**
+   * Note: MKS Robin TFT screens use various TFT controllers
+   * Supported screens are based on the ILI9341, ST7789V and ILI9328 (320x240)
+   * ILI9488 is not supported
+   * Define init sequences for other screens in u8g_dev_tft_320x240_upscale_from_128x64.cpp
+   *
+   * If the screen stays white, disable 'TFT_RESET_PIN' to let the bootloader init the screen.
+   *
+   * Setting a 'TFT_RESET_PIN' may cause a flicker when switching menus
+   * because Marlin uses the reset as a failsafe to revive a glitchy LCD.
+   */
+  //#define TFT_RESET_PIN                   PC6   // FSMC_RST
   #define TFT_BACKLIGHT_PIN                 PD13
 
-  #define LCD_USE_DMA_FSMC                        // Use DMA transfers to send data to the TFT
-  #define FSMC_DMA_DEV                      DMA2
-  #define FSMC_DMA_CHANNEL               DMA_CH5
+  #define LCD_USE_DMA_FSMC
+  #define FSMC_CS_PIN                       PD7   // NE4
+  #define FSMC_RS_PIN                       PD11  // A0
+  #define TFT_CS_PIN                 FSMC_CS_PIN
+  #define TFT_RS_PIN                 FSMC_RS_PIN
 
-  #define TFT_BUFFER_SIZE                  14400
   #if ENABLED(TFT_CLASSIC_UI)
-    #define TFT_MARLINBG_COLOR            0x3186  // White
-    #define TFT_MARLINUI_COLOR            0xC7B6  // green
+    #define TFT_MARLINBG_COLOR            0x3186  // Grey
+    #define TFT_MARLINUI_COLOR            0xC7B6  // Green
     #define TFT_BTARROWS_COLOR            0xDEE6  // Yellow
     #define TFT_BTOKMENU_COLOR            0x145F  // Cyan
   #endif
+  #define TFT_BUFFER_WORDS                 14400
+
+#elif HAS_GRAPHICAL_TFT
+
+  #define TFT_RESET_PIN                     PC6
+  #define TFT_BACKLIGHT_PIN                 PD13
+  #define TFT_CS_PIN                        PD7   // NE4
+  #define TFT_RS_PIN                        PD11  // A0
+
 #endif
 
 #if NEED_TOUCH_PINS
@@ -313,4 +322,5 @@
   #define TOUCH_SCK_PIN                     PB13  // SPI2_SCK
   #define TOUCH_MISO_PIN                    PB14  // SPI2_MISO
   #define TOUCH_MOSI_PIN                    PB15  // SPI2_MOSI
+  #define TOUCH_INT_PIN                     -1
 #endif

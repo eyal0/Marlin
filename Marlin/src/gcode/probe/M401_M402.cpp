@@ -28,21 +28,56 @@
 #include "../../module/motion.h"
 #include "../../module/probe.h"
 
+#if HAS_BLTOUCH_HS_MODE
+  #include "../../feature/bltouch.h"
+#endif
+
 /**
  * M401: Deploy and activate the Z probe
+ *
+ * With BLTOUCH_HS_MODE:
+ *  H       Report the current BLTouch HS mode state and exit
+ *  S<bool> Set High Speed (HS) Mode and exit without deploy
+ *
+ *  R<bool> Remain in place after deploying (and before activating) the probe
  */
 void GcodeSuite::M401() {
-  probe.deploy();
-  report_current_position();
+  #if HAS_BLTOUCH_HS_MODE
+    const bool seenH = parser.seen_test('H'),
+               seenS = parser.seen('S');
+    if (seenH || seenS) {
+      if (seenS) bltouch.high_speed_mode = parser.value_bool();
+      SERIAL_ECHO_MSG("BLTouch HS mode ", ON_OFF(bltouch.high_speed_mode));
+      return;
+    }
+  #endif
+
+  probe.deploy(parser.boolval('R'));
+  TERN_(PROBE_TARE, probe.tare());
+  motion.report_position();
+}
+
+void GcodeSuite::M401_report(const bool forReplay/*=true*/) {
+  TERN_(MARLIN_SMALL_BUILD, return);
+
+  #if HAS_BLTOUCH_HS_MODE
+    if (!forReplay) {
+      report_heading_etc(forReplay, F("BLTouch HS mode"));
+      SERIAL_ECHOLNPGM("  M401 S", bltouch.high_speed_mode, " ; ", ON_OFF(bltouch.high_speed_mode));
+    }
+  #endif
 }
 
 /**
  * M402: Deactivate and stow the Z probe
+ *  R<bool> Remain in place after stowing (and before deactivating) the probe
  */
 void GcodeSuite::M402() {
-  probe.stow();
-  probe.move_z_after_probing();
-  report_current_position();
+  probe.stow(parser.boolval('R'));
+  #ifdef Z_AFTER_PROBING
+    motion.do_z_clearance(Z_AFTER_PROBING);
+  #endif
+  motion.report_position();
 }
 
 #endif // HAS_BED_PROBE

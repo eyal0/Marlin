@@ -30,9 +30,23 @@
 #if ENABLED(I2C_EEPROM)
 
 #include "eeprom_if.h"
-#include <Wire.h>
 
-void eeprom_init() { Wire.begin(); }
+#if ENABLED(SOFT_I2C_EEPROM)
+  #include <SlowSoftWire.h>
+  SlowSoftWire eWire = SlowSoftWire(I2C_SDA_PIN, I2C_SCL_PIN, true);
+#else
+  #include <Wire.h>
+  #define eWire Wire
+#endif
+
+void eeprom_init() {
+  #if PINS_EXIST(I2C_SCL, I2C_SDA) && DISABLED(SOFT_I2C_EEPROM)
+    eWire.setSDA(I2C_SDA_PIN);
+    eWire.setSCL(I2C_SCL_PIN);
+  #endif
+
+  eWire.begin();
+}
 
 #if ENABLED(USE_SHARED_EEPROM)
 
@@ -42,6 +56,13 @@ void eeprom_init() { Wire.begin(); }
 #ifndef EEPROM_DEVICE_ADDRESS
   #define EEPROM_DEVICE_ADDRESS  0x50
 #endif
+#ifndef EEPROM_I2C_TRIES
+  #define EEPROM_I2C_TRIES       3
+#endif
+
+// Wire::endTransmission status for "no ACK on address", meaning no such device.
+// Any other non-zero status is a bus fault, which a re-init may clear.
+#define I2C_NO_ACK_ADDR          2
 
 static constexpr uint8_t eeprom_device_address = I2C_ADDRESS(EEPROM_DEVICE_ADDRESS);
 
@@ -49,29 +70,75 @@ static constexpr uint8_t eeprom_device_address = I2C_ADDRESS(EEPROM_DEVICE_ADDRE
 // Public functions
 // ------------------------
 
-void eeprom_write_byte(uint8_t *pos, unsigned char value) {
+#define SMALL_EEPROM (MARLIN_EEPROM_SIZE <= 2048)
+
+// Combine Address high bits into the device address on <=16Kbit (2K) and >512Kbit (64K) EEPROMs.
+// Note: MARLIN_EEPROM_SIZE is specified in bytes, whereas EEPROM model numbers refer to bits.
+//       e.g., The "16" in BL24C16 indicates a 16Kbit (2KB) size.
+static uint8_t _eeprom_calc_device_address(uint8_t * const pos) {
   const unsigned eeprom_address = (unsigned)pos;
+  return (SMALL_EEPROM || MARLIN_EEPROM_SIZE > 65536)
+    ? uint8_t(eeprom_device_address | ((eeprom_address >> (SMALL_EEPROM ? 8 : 16)) & 0x07))
+    : eeprom_device_address;
+}
 
-  Wire.beginTransmission(eeprom_device_address);
-  Wire.write(int(eeprom_address >> 8));   // MSB
-  Wire.write(int(eeprom_address & 0xFF)); // LSB
-  Wire.write(value);
-  Wire.endTransmission();
+static void _eeprom_begin(uint8_t * const pos) {
+  const unsigned eeprom_address = (unsigned)pos;
+  eWire.beginTransmission(_eeprom_calc_device_address(pos));
+  if (!SMALL_EEPROM)
+    eWire.write(uint8_t((eeprom_address >> 8) & 0xFF));  // Address High, if needed
+  eWire.write(uint8_t(eeprom_address & 0xFF));           // Address Low
+}
 
-  // wait for write cycle to complete
-  // this could be done more efficiently with "acknowledge polling"
-  delay(EEPROM_WRITE_DELAY);
+// A disturbed I2C bus can leave the peripheral stuck, and some Wire back-ends neither
+// recover from that nor report it, so a transfer can "succeed" with stale or no data.
+// Verify every transfer and reset the bus before trying again.
+
+static void _eeprom_bus_reset() {
+  // STM32duino's TwoWire keeps its buffers on the heap and frees them only in end(),
+  // so begin() on its own would orphan them. The other back-ends used here hold their
+  // buffers statically, and SlowSoftWire declares end() without defining it.
+  #if defined(HAL_STM32) && DISABLED(SOFT_I2C_EEPROM)
+    eWire.end();
+  #endif
+  eeprom_init();                                 // Force-reset and re-initialize the peripheral
+}
+
+// Read one byte, reporting success apart from the value, since 0xFF is valid data.
+static bool _eeprom_read_byte(uint8_t * const pos, uint8_t &value) {
+  for (uint8_t t = EEPROM_I2C_TRIES; t--;) {
+    _eeprom_begin(pos);
+    const uint8_t err = eWire.endTransmission();
+    if (err == I2C_NO_ACK_ADDR) break;           // Nothing is listening. Don't retry.
+    if (!err && eWire.requestFrom(_eeprom_calc_device_address(pos), (byte)1) && eWire.available()) {
+      value = eWire.read();
+      return true;
+    }
+    _eeprom_bus_reset();                         // Reset the bus and try again
+  }
+  return false;
+}
+
+void eeprom_write_byte(uint8_t *pos, uint8_t value) {
+  for (uint8_t t = EEPROM_I2C_TRIES; t--;) {
+    _eeprom_begin(pos);
+    eWire.write(value);
+    const uint8_t err = eWire.endTransmission();
+    if (err == I2C_NO_ACK_ADDR) break;           // Nothing is listening. Don't retry.
+    if (!err) {
+      // wait for write cycle to complete
+      // this could be done more efficiently with "acknowledge polling"
+      delay(EEPROM_WRITE_DELAY);
+      uint8_t stored;                            // Confirm the byte was stored
+      if (_eeprom_read_byte(pos, stored) && stored == value) return;
+    }
+    _eeprom_bus_reset();                         // Reset the bus and try again
+  }
 }
 
 uint8_t eeprom_read_byte(uint8_t *pos) {
-  const unsigned eeprom_address = (unsigned)pos;
-
-  Wire.beginTransmission(eeprom_device_address);
-  Wire.write(int(eeprom_address >> 8));   // MSB
-  Wire.write(int(eeprom_address & 0xFF)); // LSB
-  Wire.endTransmission();
-  Wire.requestFrom(eeprom_device_address, (byte)1);
-  return Wire.available() ? Wire.read() : 0xFF;
+  uint8_t value;
+  return _eeprom_read_byte(pos, value) ? value : 0xFF;
 }
 
 #endif // USE_SHARED_EEPROM
