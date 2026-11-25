@@ -6,7 +6,27 @@ To build:
 
 To build a specific architecture, for example with x86_64:
 
-`cd Marlin/Marlin && scons x86_64/marlin-calc.x86_64`
+`cd Marlin/Marlin && scons x86_64`
+
+Binaries are written to `Marlin/out/<architecture>/marlin-calc.<architecture>`.
+
+## Tests
+
+`calc_tests/` runs `marlin-calc` on G-code and checks its output. With Python 3
+and pytest installed, build for your machine and then run:
+
+`cd Marlin && pytest calc_tests`
+
+To test a different binary, add `--marlin-calc <path>`, plus
+`--emulator qemu-arm-static` (or another emulator) for one built for another
+architecture.
+
+`test_regression.py` compares whole-file results with `calc_tests/golden.json`.
+When a change to the estimates is intended, re-record them with
+`pytest calc_tests --update-golden` and review the diff.
+
+CI builds every architecture, runs the tests on each, and uploads the binaries
+as artifacts.
 
 Original `README.md` below.
 

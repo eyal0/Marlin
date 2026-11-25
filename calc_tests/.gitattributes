@@ -1,0 +1,4 @@
+# golden.json's progress checkpoints depend on byte offsets in the fixtures,
+# so they must keep LF line endings on every platform.
+*.gcode text eol=lf
+golden.json text eol=lf
