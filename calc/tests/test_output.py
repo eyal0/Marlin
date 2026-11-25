@@ -4,8 +4,6 @@ Every test here also goes through marlin_calc.parse_output, which rejects any
 stdout line the plugin wouldn't understand.
 """
 
-import pytest
-
 from marlin_calc import back_and_forth
 
 # Ends with a travel move, so the last Progress line has all filament counted.
@@ -78,13 +76,9 @@ def test_printing_area_without_extrusion_is_null(calc):
     assert analysis["filament"] == {}
 
 
-@pytest.mark.xfail(reason="the last line's filepos is -1/filesize when the file "
-                          "doesn't end with a newline: tellg() fails at EOF")
 def test_last_progress_reaches_end_of_file_without_trailing_newline(calc):
     assert calc(PRINT.rstrip("\n")).progress[-1].filepos == 1
 
 
-@pytest.mark.xfail(reason="a missing input file is analyzed as an empty one, "
-                          "exiting with status 0")
 def test_missing_input_file_is_an_error(marlin_calc, tmp_path):
     assert marlin_calc.invoke(str(tmp_path / "missing.gcode")).returncode != 0

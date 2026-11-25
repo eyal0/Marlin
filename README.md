@@ -1,5 +1,11 @@
 # Marlin timing simulator
 
+`marlin-calc` runs G-code through Marlin's own parser, G-code handlers, and
+planner, configured by `Marlin/Configuration.h` and `Configuration_adv.h`, and
+adds up how long the planned moves take. Its one change to Marlin's code is
+`RUNTIME_JERK_MODE`, which lets the planner use either Classic Jerk or
+Junction Deviation, as the printer's M503 settings say.
+
 `marlin-calc`'s sources, CMake build, and tests are in `calc/`. To build and
 test it, for example for x86_64 Linux:
 

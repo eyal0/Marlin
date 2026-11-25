@@ -1,6 +1,7 @@
 """Whole-file regression tests against recorded results.
 
-golden.json records marlin-calc's results for each file in gcode/. A failure
+golden.json records marlin-calc's results for each file in gcode/, run with
+the printer settings in the matching .mcodes file if there is one. A failure
 means the estimates changed. If the change is intended, re-record with
 
     pytest calc/tests --update-golden
@@ -46,7 +47,8 @@ def golden(pytestconfig):
 
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda path: path.name)
 def test_matches_golden(marlin_calc, golden, pytestconfig, path):
-    actual = summarize(marlin_calc.run(path))
+    settings = path.with_suffix(".mcodes")
+    actual = summarize(marlin_calc.run(path, settings.read_text() if settings.exists() else None))
     if pytestconfig.getoption("update_golden"):
         golden[path.name] = actual
         return

@@ -1,19 +1,43 @@
 cmake_minimum_required(VERSION 3.25)
 project(marlin-calc LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 set(MARLIN ${CMAKE_CURRENT_SOURCE_DIR}/../Marlin)
 
 add_executable(marlin-calc
-  src/calc.cpp
+  src/main.cpp
+  src/stubs.cpp
+  ${MARLIN}/src/core/serial.cpp
   ${MARLIN}/src/feature/fwretract.cpp
+  ${MARLIN}/src/gcode/config/M92.cpp
   ${MARLIN}/src/gcode/config/M200-M205.cpp
+  ${MARLIN}/src/gcode/config/M220.cpp
+  ${MARLIN}/src/gcode/config/M221.cpp
+  ${MARLIN}/src/gcode/feature/advance/M900.cpp
+  ${MARLIN}/src/gcode/feature/fwretract/G10_G11.cpp
+  ${MARLIN}/src/gcode/feature/fwretract/M207-M209.cpp
+  ${MARLIN}/src/gcode/gcode.cpp
+  ${MARLIN}/src/gcode/geometry/G92.cpp
+  ${MARLIN}/src/gcode/motion/G0_G1.cpp
   ${MARLIN}/src/gcode/motion/G2_G3.cpp
+  ${MARLIN}/src/gcode/motion/M400.cpp
+  ${MARLIN}/src/gcode/parser.cpp
+  ${MARLIN}/src/gcode/queue.cpp
+  ${MARLIN}/src/gcode/units/M82_M83.cpp
+  ${MARLIN}/src/module/fans.cpp
+  ${MARLIN}/src/module/motion.cpp
   ${MARLIN}/src/module/planner.cpp
+  ${MARLIN}/src/HAL/LINUX/HAL.cpp
+  ${MARLIN}/src/HAL/LINUX/arduino.cpp
+  ${MARLIN}/src/HAL/LINUX/hardware/Clock.cpp
+  ${MARLIN}/src/HAL/LINUX/hardware/Gpio.cpp
 )
-target_include_directories(marlin-calc PRIVATE src ${MARLIN})
-target_compile_options(marlin-calc PRIVATE -Wall)
+target_compile_definitions(marlin-calc PRIVATE __PLAT_LINUX__)
+target_include_directories(marlin-calc PRIVATE src ${MARLIN} ${MARLIN}/src/HAL/LINUX/include)
+target_compile_options(marlin-calc PRIVATE -Wall -Wno-expansion-to-defined)
+find_package(Threads REQUIRED)
+target_link_libraries(marlin-calc PRIVATE Threads::Threads)
 if(NOT APPLE)
   target_link_options(marlin-calc PRIVATE -static)
 endif()

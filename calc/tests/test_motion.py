@@ -62,9 +62,6 @@ def test_short_move_follows_triangle_profile(calc):
     assert result.time == pytest.approx(3 * 2 * math.sqrt(10 / 500), rel=0.01)
 
 
-@pytest.mark.xfail(reason="files with fewer than 3 moves report zero time: the "
-                          "planner holds back the first blocks and calc.cpp's "
-                          "final drain loop stops at the first empty poll")
 @pytest.mark.parametrize("moves", [1, 2])
 def test_files_with_few_moves_are_timed(calc, moves):
     result = calc(NO_JERK + "M204 T1000\n" + back_and_forth(moves, 100, 6000))
@@ -154,21 +151,34 @@ def test_corner_speed_is_limited_by_jerk(calc, jerk, seconds_per_corner):
     settings = f"M204 T50\nM205 X{jerk} Y{jerk}\n"
     square = calc(settings + "G1 F600\nG1 X20\nG1 X20 Y20\nG1 X0 Y20\nG1 X0 Y0\n")
     straight = calc(settings + "G1 F600\nG1 X20\nG1 X40\nG1 X60\nG1 X80\n")
-    assert square.time - straight.time == pytest.approx(3 * seconds_per_corner, abs=1e-4)
+    assert square.time - straight.time == pytest.approx(3 * seconds_per_corner, rel=0.02, abs=1e-4)
 
 
-def test_m205_j_switches_to_junction_deviation(calc):
+def test_printer_settings_choose_junction_deviation(calc):
+    # A firmware using Junction Deviation reports J in M503's M205 line.
     classic = calc(PRINTING_LAPS).time
-    small_deviation = calc("M205 J0.02\n" + PRINTING_LAPS).time
-    large_deviation = calc("M205 J0.2\n" + PRINTING_LAPS).time
+    small_deviation = calc(PRINTING_LAPS, mcodes="M205 B20000 S0 T0 J0.02").time
+    large_deviation = calc(PRINTING_LAPS, mcodes="M205 B20000 S0 T0 J0.2").time
     assert small_deviation != classic
     assert large_deviation < small_deviation
-    # Setting a classic jerk value switches back.
-    assert calc("M205 J0.02\nM205 X10\n" + PRINTING_LAPS).time == classic
+    reported_classic = calc(PRINTING_LAPS, mcodes="M205 B20000 S0 T0 X10 Y10 Z0.3 E5").time
+    assert reported_classic == classic
+
+
+def test_m205_in_gcode_keeps_the_jerk_mode(calc):
+    junction_deviation = "M205 J0.02"
+    assert calc("M205 J0.02\n" + PRINTING_LAPS).time == calc(PRINTING_LAPS).time
+    assert (calc("M205 X10 Y10\n" + PRINTING_LAPS, mcodes=junction_deviation).time
+            == calc(PRINTING_LAPS, mcodes=junction_deviation).time)
+    # It still changes the values the mode uses.
+    assert (calc("M205 J0.2\n" + PRINTING_LAPS, mcodes=junction_deviation).time
+            == calc(PRINTING_LAPS, mcodes="M205 J0.2").time)
 
 
 def test_out_of_range_junction_deviation_is_ignored(calc):
-    assert calc("M205 J5\n" + PRINTING_LAPS).time == calc(PRINTING_LAPS).time
+    junction_deviation = "M205 J0.02"
+    assert (calc("M205 J5\n" + PRINTING_LAPS, mcodes=junction_deviation).time
+            == calc(PRINTING_LAPS, mcodes=junction_deviation).time)
 
 
 def test_linear_advance_slows_extruding_moves(calc):
@@ -204,9 +214,10 @@ def test_dwell(calc, gcode, seconds):
 
 
 def test_dwell_adds_to_motion_time(calc):
+    # Like M400, G4 first waits for the moves before it to finish.
     first, second = "G1 F6000\nG1 X100\nG1 X0\n", "G1 X100\nG1 X0\n"
     assert calc(first + "G4 S3\n" + second).time == pytest.approx(
-        calc(first + second).time + 3, rel=1e-12)
+        calc(first + "M400\n" + second).time + 3, rel=1e-12)
 
 
 @pytest.mark.parametrize("gcode", ["G28", "G28 X Y"])

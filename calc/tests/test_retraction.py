@@ -18,6 +18,12 @@ def test_retraction_length_and_feedrates(calc):
     assert time(4) > calc(PRINT + RESUME).time
 
 
+def test_retraction_defaults_are_marlins(calc):
+    # RETRACT_LENGTH 3 mm at RETRACT_FEEDRATE 45 mm/s, RETRACT_RECOVER_FEEDRATE 8 mm/s.
+    assert calc(retract_and_recover()).time == calc(
+        retract_and_recover("M207 S3 F2700\nM208 F480\n")).time
+
+
 def test_retraction_is_limited_by_max_e_feedrate(calc):
     # A 40 mm/s retraction capped at 10 mm/s takes as long as a 10 mm/s one.
     capped = calc(retract_and_recover("M203 E10\nM207 S4 F2400\nM208 F480\n"))

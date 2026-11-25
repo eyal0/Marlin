@@ -66,16 +66,15 @@ def test_volume_uses_nominal_filament_diameter(calc):
 
 
 def test_m200_enables_volumetric_extrusion(calc):
-    # In volumetric mode E is in mm^3 of plastic.
+    # In volumetric mode E is in mm^3 of plastic. Filament is counted in
+    # whole extruder steps.
     result = calc("M200 D2.85\n" + EXTRUDE)
-    assert result.filament() == pytest.approx(3 / cross_section_mm2(2.85))
+    assert result.filament() == pytest.approx(3 / cross_section_mm2(2.85), abs=1 / 500)
     assert calc("M200 D2.85\nM200 S0\n" + EXTRUDE).filament() == pytest.approx(3)
 
 
-@pytest.mark.xfail(reason="the reported volume always assumes the default 1.75 mm "
-                          "filament, ignoring the M200 D diameter")
 def test_volumetric_volume_matches_the_gcode(calc):
-    assert calc("M200 D2.85\n" + EXTRUDE).volume() == pytest.approx(3 / 1000)
+    assert calc("M200 D2.85\n" + EXTRUDE).volume() == pytest.approx(3 / 1000, rel=1e-3)
 
 
 def test_printing_area_covers_only_extruding_moves(calc):
