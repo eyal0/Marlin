@@ -1,0 +1,14 @@
+name: Weekly CI
+
+# Separate from ci.yml because GitHub disables scheduled workflows after 60
+# days without commits, which would also stop CI for pushes and pull requests.
+on:
+  schedule:
+    - cron: '5 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
