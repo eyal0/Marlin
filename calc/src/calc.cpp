@@ -11,10 +11,10 @@
 #include <cwctype>
 #include <limits>
 #include <inttypes.h>
-#include "../core/macros.h"
-#include "../../Configuration.h"
-#include "planner.h"
-#include "../feature/fwretract.h"
+#include "src/core/macros.h"
+#include "Configuration.h"
+#include "src/module/planner.h"
+#include "src/feature/fwretract.h"
 
 //===========================================================================
 //=============================public variables=============================

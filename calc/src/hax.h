@@ -10,7 +10,7 @@ void manage_inactivity2();
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-#include "../inc/MarlinConfig.h"
+#include "src/inc/MarlinConfig.h"
 
 //From motion.h
 extern xyze_pos_t current_position;

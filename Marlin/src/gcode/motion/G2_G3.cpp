@@ -26,7 +26,7 @@
 
 //#include "../gcode.h"
 //#include "../../module/motion.h"
-#include "../../module/hax.h"
+#include "hax.h"
 #include "../../module/planner.h"
 //#include "../../module/temperature.h"
 

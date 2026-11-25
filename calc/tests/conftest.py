@@ -8,20 +8,20 @@ import pytest
 
 from marlin_calc import MarlinCalc
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+CALC_DIR = Path(__file__).resolve().parent.parent
 
 
-def host_target() -> str:
-    """The SConstruct target for this machine.
+def host_binary() -> Path:
+    """This machine's build from its CMake preset.
 
-    Matches how OctoPrint-PrintTimeGenius picks which binary to run.
+    Named the way OctoPrint-PrintTimeGenius picks which binary to run.
     """
-    machine = platform.machine()
+    target, suffix = platform.machine(), ""
     if platform.system() == "Darwin":
-        return f"darwin-{machine}"
-    if platform.system() == "Windows":
-        return f"windows-{machine}.exe"
-    return machine
+        target = f"darwin-{target}"
+    elif platform.system() == "Windows":
+        target, suffix = f"windows-{target}", ".exe"
+    return CALC_DIR / "build" / target / f"marlin-calc.{target}{suffix}"
 
 
 def pytest_addoption(parser):
@@ -29,7 +29,7 @@ def pytest_addoption(parser):
     group.addoption(
         "--marlin-calc", default=os.environ.get("MARLIN_CALC"),
         help="marlin-calc binary to test (default: $MARLIN_CALC, else this "
-             "machine's build under Marlin/out)")
+             "machine's build under calc/build)")
     group.addoption(
         "--emulator", default=os.environ.get("MARLIN_CALC_EMULATOR"),
         help="command that runs the binary, e.g. qemu-arm-static "
@@ -42,14 +42,11 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope="session")
 def marlin_calc(pytestconfig) -> MarlinCalc:
-    binary = pytestconfig.getoption("marlin_calc")
-    if binary is None:
-        target = host_target()
-        binary = REPO_ROOT / "Marlin" / "out" / target / f"marlin-calc.{target}"
-    binary = Path(binary).resolve()
+    binary = Path(pytestconfig.getoption("marlin_calc") or host_binary()).resolve()
     if not binary.is_file():
-        pytest.exit(f"marlin-calc not found at {binary}; build it with scons "
-                    "or pass --marlin-calc", returncode=pytest.ExitCode.USAGE_ERROR)
+        pytest.exit(f"marlin-calc not found at {binary}; build it with "
+                    "cmake --workflow --preset <target> in calc/, or pass "
+                    "--marlin-calc", returncode=pytest.ExitCode.USAGE_ERROR)
     emulator = shlex.split(pytestconfig.getoption("emulator") or "")
     return MarlinCalc(emulator + [str(binary)])
 

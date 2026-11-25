@@ -1,0 +1,5 @@
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR armv6l)
+set(CMAKE_CXX_COMPILER arm-linux-gnueabi-g++)
+set(CMAKE_CXX_FLAGS_INIT "-march=armv6 -mlittle-endian")
+set(CMAKE_CROSSCOMPILING_EMULATOR qemu-arm-static)

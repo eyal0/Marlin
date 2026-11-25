@@ -1,29 +1,32 @@
 # Marlin timing simulator
 
-To build:
+`marlin-calc`'s sources, CMake build, and tests are in `calc/`. To build and
+test it, for example for x86_64 Linux:
 
-`cd Marlin/Marlin && scons`
+`cd calc && cmake --workflow --preset x86_64`
 
-To build a specific architecture, for example with x86_64:
+The presets are `x86_64`, `i686`, `aarch64`, `armv7l`, `armv6l`, `mips`,
+`windows-AMD64`, `windows-x86`, `darwin-arm64` and `darwin-x86_64`. The Linux
+ones other than `x86_64` cross-compile with the compilers named in
+`calc/cmake/toolchains/` and run the tests under qemu.
 
-`cd Marlin/Marlin && scons x86_64`
-
-Binaries are written to `Marlin/out/<architecture>/marlin-calc.<architecture>`.
+Binaries are written to `calc/build/<preset>/marlin-calc.<preset>`.
 
 ## Tests
 
-`calc_tests/` runs `marlin-calc` on G-code and checks its output. With Python 3
-and pytest installed, build for your machine and then run:
+`calc/tests/` runs `marlin-calc` on G-code and checks its output. The presets
+run them through CTest, which needs Python 3 and pytest. To run them directly
+on this machine's build:
 
-`cd Marlin && pytest calc_tests`
+`pytest calc/tests`
 
 To test a different binary, add `--marlin-calc <path>`, plus
 `--emulator qemu-arm-static` (or another emulator) for one built for another
 architecture.
 
-`test_regression.py` compares whole-file results with `calc_tests/golden.json`.
+`test_regression.py` compares whole-file results with `calc/tests/golden.json`.
 When a change to the estimates is intended, re-record them with
-`pytest calc_tests --update-golden` and review the diff.
+`pytest calc/tests --update-golden` and review the diff.
 
 CI builds every architecture, runs the tests on each, and uploads the binaries
 as artifacts.

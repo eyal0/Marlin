@@ -3,7 +3,7 @@
 golden.json records marlin-calc's results for each file in gcode/. A failure
 means the estimates changed. If the change is intended, re-record with
 
-    pytest calc_tests --update-golden
+    pytest calc/tests --update-golden
 
 and review the diff of golden.json.
 """

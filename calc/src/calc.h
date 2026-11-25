@@ -1,7 +1,7 @@
 #ifndef __CALC_H
 #define __CALC_H
 
-#include "../../Configuration.h"
+#include "Configuration.h"
 
 //extern float homing_feedrate[];
 void get_coordinates();

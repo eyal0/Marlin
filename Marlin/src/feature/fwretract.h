@@ -25,7 +25,7 @@
  * fwretract.h - Define firmware-based retraction interface
  */
 
-#include "../module/hax.h"
+#include "hax.h"
 #include "../inc/MarlinConfigPre.h"
 
 typedef struct {

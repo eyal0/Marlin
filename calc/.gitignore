@@ -1,0 +1,3 @@
+# The root .gitignore, from upstream Marlin, ignores every CMakeLists.txt.
+!CMakeLists.txt
+build/

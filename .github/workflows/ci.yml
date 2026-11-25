@@ -25,20 +25,16 @@ jobs:
             packages: g++-multilib
           - target: aarch64
             packages: g++-aarch64-linux-gnu qemu-user-static
-            emulator: qemu-aarch64-static
           - target: armv7l
             packages: g++-arm-linux-gnueabi qemu-user-static
-            emulator: qemu-arm-static
           - target: armv6l
             packages: g++-arm-linux-gnueabi qemu-user-static
-            emulator: qemu-arm-static
           - target: mips
             packages: g++-mipsel-linux-gnu qemu-user-static
-            emulator: qemu-mipsel-static
           # Windows binaries are tested on Windows by test-windows.
-          - target: windows-AMD64.exe
+          - target: windows-AMD64
             packages: g++-mingw-w64-x86-64
-          - target: windows-x86.exe
+          - target: windows-x86
             packages: g++-mingw-w64-i686
     steps:
       - uses: actions/checkout@v7
@@ -50,18 +46,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ${{ matrix.packages }}
-      - run: pip install scons pytest
-      - name: Build
-        run: scons -C Marlin -j4 ${{ matrix.target }}
-      - name: Test
-        if: ${{ !startsWith(matrix.target, 'windows-') }}
-        run: pytest calc_tests --marlin-calc Marlin/out/${{ matrix.target }}/marlin-calc.${{ matrix.target }}
-        env:
-          MARLIN_CALC_EMULATOR: ${{ matrix.emulator }}
+      - run: pip install pytest
+      - name: Build and test
+        working-directory: calc
+        run: cmake --workflow --preset ${{ matrix.target }}
       - uses: actions/upload-artifact@v7
         with:
           name: marlin-calc.${{ matrix.target }}
-          path: Marlin/out/${{ matrix.target }}/marlin-calc.${{ matrix.target }}
+          path: calc/build/${{ matrix.target }}/marlin-calc.${{ matrix.target }}*
           if-no-files-found: error
 
   # One runner builds both macOS binaries because GitHub's macOS runners are
@@ -74,24 +66,24 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.x'
-      - run: pip install scons pytest
-      - name: Build
-        run: scons -C Marlin -j4 darwin-arm64 darwin-x86_64
-      - name: Test darwin-arm64
-        run: pytest calc_tests --marlin-calc Marlin/out/darwin-arm64/marlin-calc.darwin-arm64
+      - run: pip install pytest
+      - name: Build and test darwin-arm64
+        working-directory: calc
+        run: cmake --workflow --preset darwin-arm64
       - uses: actions/upload-artifact@v7
         with:
           name: marlin-calc.darwin-arm64
-          path: Marlin/out/darwin-arm64/marlin-calc.darwin-arm64
+          path: calc/build/darwin-arm64/marlin-calc.darwin-arm64
           if-no-files-found: error
       - name: Install Rosetta
         run: sudo softwareupdate --install-rosetta --agree-to-license
-      - name: Test darwin-x86_64
-        run: pytest calc_tests --marlin-calc Marlin/out/darwin-x86_64/marlin-calc.darwin-x86_64
+      - name: Build and test darwin-x86_64
+        working-directory: calc
+        run: cmake --workflow --preset darwin-x86_64
       - uses: actions/upload-artifact@v7
         with:
           name: marlin-calc.darwin-x86_64
-          path: Marlin/out/darwin-x86_64/marlin-calc.darwin-x86_64
+          path: calc/build/darwin-x86_64/marlin-calc.darwin-x86_64
           if-no-files-found: error
 
   test-windows:
@@ -103,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [windows-AMD64.exe, windows-x86.exe]
+        target: [windows-AMD64, windows-x86]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -114,4 +106,4 @@ jobs:
         with:
           name: marlin-calc.${{ matrix.target }}
           path: bin
-      - run: pytest calc_tests --marlin-calc bin/marlin-calc.${{ matrix.target }}
+      - run: pytest calc/tests --marlin-calc bin/marlin-calc.${{ matrix.target }}.exe

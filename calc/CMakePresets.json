@@ -1,0 +1,152 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "cross",
+      "hidden": true,
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/${presetName}.cmake"
+    },
+    { "name": "x86_64", "inherits": "base" },
+    { "name": "i686", "inherits": "cross" },
+    { "name": "aarch64", "inherits": "cross" },
+    { "name": "armv7l", "inherits": "cross" },
+    { "name": "armv6l", "inherits": "cross" },
+    { "name": "mips", "inherits": "cross" },
+    { "name": "windows-AMD64", "inherits": "cross" },
+    { "name": "windows-x86", "inherits": "cross" },
+    {
+      "name": "darwin-arm64",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+      }
+    },
+    {
+      "name": "darwin-x86_64",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "10.13"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "x86_64", "configurePreset": "x86_64" },
+    { "name": "i686", "configurePreset": "i686" },
+    { "name": "aarch64", "configurePreset": "aarch64" },
+    { "name": "armv7l", "configurePreset": "armv7l" },
+    { "name": "armv6l", "configurePreset": "armv6l" },
+    { "name": "mips", "configurePreset": "mips" },
+    { "name": "windows-AMD64", "configurePreset": "windows-AMD64" },
+    { "name": "windows-x86", "configurePreset": "windows-x86" },
+    { "name": "darwin-arm64", "configurePreset": "darwin-arm64" },
+    { "name": "darwin-x86_64", "configurePreset": "darwin-x86_64" }
+  ],
+  "testPresets": [
+    {
+      "name": "test",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "x86_64", "inherits": "test", "configurePreset": "x86_64" },
+    { "name": "i686", "inherits": "test", "configurePreset": "i686" },
+    { "name": "aarch64", "inherits": "test", "configurePreset": "aarch64" },
+    { "name": "armv7l", "inherits": "test", "configurePreset": "armv7l" },
+    { "name": "armv6l", "inherits": "test", "configurePreset": "armv6l" },
+    { "name": "mips", "inherits": "test", "configurePreset": "mips" },
+    { "name": "darwin-arm64", "inherits": "test", "configurePreset": "darwin-arm64" },
+    { "name": "darwin-x86_64", "inherits": "test", "configurePreset": "darwin-x86_64" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "x86_64",
+      "steps": [
+        { "type": "configure", "name": "x86_64" },
+        { "type": "build", "name": "x86_64" },
+        { "type": "test", "name": "x86_64" }
+      ]
+    },
+    {
+      "name": "i686",
+      "steps": [
+        { "type": "configure", "name": "i686" },
+        { "type": "build", "name": "i686" },
+        { "type": "test", "name": "i686" }
+      ]
+    },
+    {
+      "name": "aarch64",
+      "steps": [
+        { "type": "configure", "name": "aarch64" },
+        { "type": "build", "name": "aarch64" },
+        { "type": "test", "name": "aarch64" }
+      ]
+    },
+    {
+      "name": "armv7l",
+      "steps": [
+        { "type": "configure", "name": "armv7l" },
+        { "type": "build", "name": "armv7l" },
+        { "type": "test", "name": "armv7l" }
+      ]
+    },
+    {
+      "name": "armv6l",
+      "steps": [
+        { "type": "configure", "name": "armv6l" },
+        { "type": "build", "name": "armv6l" },
+        { "type": "test", "name": "armv6l" }
+      ]
+    },
+    {
+      "name": "mips",
+      "steps": [
+        { "type": "configure", "name": "mips" },
+        { "type": "build", "name": "mips" },
+        { "type": "test", "name": "mips" }
+      ]
+    },
+    {
+      "name": "windows-AMD64",
+      "steps": [
+        { "type": "configure", "name": "windows-AMD64" },
+        { "type": "build", "name": "windows-AMD64" }
+      ]
+    },
+    {
+      "name": "windows-x86",
+      "steps": [
+        { "type": "configure", "name": "windows-x86" },
+        { "type": "build", "name": "windows-x86" }
+      ]
+    },
+    {
+      "name": "darwin-arm64",
+      "steps": [
+        { "type": "configure", "name": "darwin-arm64" },
+        { "type": "build", "name": "darwin-arm64" },
+        { "type": "test", "name": "darwin-arm64" }
+      ]
+    },
+    {
+      "name": "darwin-x86_64",
+      "steps": [
+        { "type": "configure", "name": "darwin-x86_64" },
+        { "type": "build", "name": "darwin-x86_64" },
+        { "type": "test", "name": "darwin-x86_64" }
+      ]
+    }
+  ]
+}

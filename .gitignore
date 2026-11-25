@@ -106,6 +106,8 @@ tags
 *.exe
 *.out
 *.app
+*.i*86
+*.x86_64
 *.hex
 
 # Debug files
@@ -132,6 +134,11 @@ Marlin/*/.travis.yml
 Marlin/*/*/.travis.yml
 Marlin/*/*/*/.travis.yml
 Marlin/*/*/*/*/.travis.yml
+Marlin/.gitignore
+Marlin/*/.gitignore
+Marlin/*/*/.gitignore
+Marlin/*/*/*/.gitignore
+Marlin/*/*/*/*/.gitignore
 Marlin/readme.txt
 Marlin/*/readme.txt
 Marlin/*/*/readme.txt
