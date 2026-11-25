@@ -13,46 +13,33 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  linux:
     name: ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64
-            os: ubuntu-24.04
           - target: i686
-            os: ubuntu-24.04
             packages: g++-multilib
           - target: aarch64
-            os: ubuntu-24.04
             packages: g++-aarch64-linux-gnu qemu-user-static
             emulator: qemu-aarch64-static
           - target: armv7l
-            os: ubuntu-24.04
             packages: g++-arm-linux-gnueabi qemu-user-static
             emulator: qemu-arm-static
           - target: armv6l
-            os: ubuntu-24.04
             packages: g++-arm-linux-gnueabi qemu-user-static
             emulator: qemu-arm-static
           - target: mips
-            os: ubuntu-24.04
             packages: g++-mipsel-linux-gnu qemu-user-static
             emulator: qemu-mipsel-static
           # Windows binaries are tested on Windows by test-windows.
           - target: windows-AMD64.exe
-            os: ubuntu-24.04
             packages: g++-mingw-w64-x86-64
           - target: windows-x86.exe
-            os: ubuntu-24.04
             packages: g++-mingw-w64-i686
-          - target: darwin-arm64
-            os: macos-latest
-          # Built on Apple Silicon and tested under Rosetta.
-          - target: darwin-x86_64
-            os: macos-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -63,9 +50,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ${{ matrix.packages }}
-      - name: Install Rosetta
-        if: matrix.target == 'darwin-x86_64'
-        run: sudo softwareupdate --install-rosetta --agree-to-license
       - run: pip install scons pytest
       - name: Build
         run: scons -C Marlin -j4 ${{ matrix.target }}
@@ -80,9 +64,39 @@ jobs:
           path: Marlin/out/${{ matrix.target }}/marlin-calc.${{ matrix.target }}
           if-no-files-found: error
 
+  # One runner builds both macOS binaries because GitHub's macOS runners are
+  # often short on capacity. The x86_64 binary is tested under Rosetta.
+  macos:
+    name: darwin
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - run: pip install scons pytest
+      - name: Build
+        run: scons -C Marlin -j4 darwin-arm64 darwin-x86_64
+      - name: Test darwin-arm64
+        run: pytest calc_tests --marlin-calc Marlin/out/darwin-arm64/marlin-calc.darwin-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: marlin-calc.darwin-arm64
+          path: Marlin/out/darwin-arm64/marlin-calc.darwin-arm64
+          if-no-files-found: error
+      - name: Install Rosetta
+        run: sudo softwareupdate --install-rosetta --agree-to-license
+      - name: Test darwin-x86_64
+        run: pytest calc_tests --marlin-calc Marlin/out/darwin-x86_64/marlin-calc.darwin-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: marlin-calc.darwin-x86_64
+          path: Marlin/out/darwin-x86_64/marlin-calc.darwin-x86_64
+          if-no-files-found: error
+
   test-windows:
     name: test ${{ matrix.target }}
-    needs: build
+    needs: linux
     # Still test whichever Windows binaries built if another target failed.
     if: ${{ !cancelled() }}
     runs-on: windows-latest
