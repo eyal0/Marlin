@@ -15,12 +15,19 @@ def add_program(env, target):
   p = env.Program(os.path.join(out_dir, target, 'marlin-calc.' + target),
                   [os.path.join(out_dir, target, x) for x in source_files])
   Clean(p, os.path.join(out_dir, target))
+  env.Alias(target, p)
 
 env = Environment(
-    CXX='clang',
-    CPPFLAGS= '-Wall -std=gnu++14 ' + debug_flags,
-    LINKFLAGS='-Wall -std=gnu++14 -lstdc++ ' + debug_flags)
+    CXX='clang++',
+    CPPFLAGS= '-Wall -std=gnu++14 -arch x86_64 ' + debug_flags,
+    LINKFLAGS='-Wall -std=gnu++14 -arch x86_64 ' + debug_flags)
 add_program(env, 'darwin-x86_64')
+
+env = Environment(
+    CXX='clang++',
+    CPPFLAGS= '-Wall -std=gnu++14 -arch arm64 ' + debug_flags,
+    LINKFLAGS='-Wall -std=gnu++14 -arch arm64 ' + debug_flags)
+add_program(env, 'darwin-arm64')
 
 env = Environment(
     CXX='clang',
@@ -34,10 +41,12 @@ env = Environment(
     LINKFLAGS='-Wall -static -std=gnu++11 ' + debug_flags)
 add_program(env, 'x86_64')
 
+# x87 math rounds differently from the single-precision float Marlin uses, so
+# 32-bit x86 builds use SSE.
 env = Environment(
     CXX='g++',
-    CPPFLAGS= '-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu ' + debug_flags,
-    LINKFLAGS='-Wall -static -std=gnu++11 -m32 -I/usr/include/x86_64-linux-gnu ' + debug_flags)
+    CPPFLAGS= '-Wall -static -std=gnu++11 -m32 -msse2 -mfpmath=sse -I/usr/include/x86_64-linux-gnu ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 -m32 -msse2 -mfpmath=sse -I/usr/include/x86_64-linux-gnu ' + debug_flags)
 add_program(env, 'i686')
 
 env = Environment(
@@ -72,6 +81,6 @@ add_program(env, 'windows-AMD64.exe')
 
 env = Environment(
     CXX='i686-w64-mingw32-g++',
-    CPPFLAGS= '-Wall -static -std=gnu++11 ' + debug_flags,
-    LINKFLAGS='-Wall -static -std=gnu++11 ' + debug_flags)
+    CPPFLAGS= '-Wall -static -std=gnu++11 -msse2 -mfpmath=sse ' + debug_flags,
+    LINKFLAGS='-Wall -static -std=gnu++11 -msse2 -mfpmath=sse ' + debug_flags)
 add_program(env, 'windows-x86.exe')
