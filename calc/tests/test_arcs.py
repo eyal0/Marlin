@@ -29,7 +29,10 @@ def test_arc_direction(calc, command, bulge_y):
 def test_mirrored_arcs_take_equal_time(calc):
     clockwise = calc(START + "G2 X70 Y50 I10 J0\nG1 X80 Y50\n")
     counter_clockwise = calc(START + "G3 X70 Y50 I10 J0\nG1 X80 Y50\n")
-    assert clockwise.time == pytest.approx(counter_clockwise.time, rel=1e-9)
+    # A half circle is where Marlin rounds its segment count up, so the last
+    # bit of atan2f() decides between 36 and 37 segments. macOS's atan2f gives
+    # G2 37, which takes 0.05 ms less.
+    assert clockwise.time == pytest.approx(counter_clockwise.time, abs=1e-4)
 
 
 def test_radius_form_matches_center_form(calc):
