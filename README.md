@@ -12,11 +12,13 @@ test it, for example for x86_64 Linux:
 `cd calc && cmake --workflow --preset x86_64`
 
 The presets are `x86_64`, `i686`, `aarch64`, `armv7l`, `armv6l`, `mips`,
-`windows-AMD64`, `windows-x86`, `darwin-arm64` and `darwin-x86_64`. The Linux
-ones other than `x86_64` cross-compile with the compilers named in
-`calc/cmake/toolchains/` and run the tests under qemu.
+`windows-AMD64`, `windows-x86`, `darwin-arm64`, `darwin-x86_64` and
+`freebsd-amd64`. The Linux ones other than `x86_64` cross-compile with the
+compilers named in `calc/cmake/toolchains/` and run the tests under qemu.
 
-Binaries are written to `calc/build/<preset>/marlin-calc.<preset>`.
+Binaries are written to `calc/build/<preset>/`, named as
+OctoPrint-PrintTimeGenius expects, for example `marlin-calc.x86_64` or
+`marlin-calc.amd64` for FreeBSD.
 
 ## Tests
 
@@ -36,6 +38,13 @@ When a change to the estimates is intended, re-record them with
 
 CI builds every architecture, runs the tests on each, and uploads the binaries
 as artifacts.
+
+## Releases
+
+Pushing a tag named `marlin-calc-<version>`, for example `marlin-calc-1.0.0`,
+builds and tests every binary OctoPrint-PrintTimeGenius uses and publishes them
+as a GitHub release, along with `marlin-calc.tar.gz` (all of them, executable)
+and `SHA256SUMS`.
 
 Original `README.md` below.
 

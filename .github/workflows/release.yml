@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'marlin-calc-*'
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: marlin-calc.*
+          path: dist
+          merge-multiple: true
+      - name: Package
+        working-directory: dist
+        run: |
+          # The binaries OctoPrint-PrintTimeGenius chooses between.
+          for target in x86_64 i686 aarch64 armv7l armv6l mips amd64 \
+                        darwin-x86_64 darwin-arm64 windows-AMD64.exe windows-x86.exe; do
+            test -f "marlin-calc.$target" || { echo "Missing marlin-calc.$target"; exit 1; }
+          done
+          chmod +x marlin-calc.*
+          tar -czf marlin-calc.tar.gz marlin-calc.*
+          sha256sum marlin-calc.* > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: |
+            marlin-calc for OctoPrint-PrintTimeGenius, built from ${{ github.sha }}.
+
+            `marlin-calc.tar.gz` contains every binary with its executable bit set, ready to extract into `octoprint_PrintTimeGenius/analyzers/`.
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "$GITHUB_REF_NAME" --notes "$NOTES"
