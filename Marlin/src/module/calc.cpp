@@ -7,6 +7,9 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
+#include <cwctype>
+#include <limits>
 #include <inttypes.h>
 #include "../core/macros.h"
 #include "../../Configuration.h"
