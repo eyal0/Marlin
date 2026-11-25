@@ -16,12 +16,16 @@ def host_binary() -> Path:
 
     Named the way OctoPrint-PrintTimeGenius picks which binary to run.
     """
-    target, suffix = platform.machine(), ""
+    preset = target = platform.machine()
+    suffix = ""
     if platform.system() == "Darwin":
-        target = f"darwin-{target}"
+        preset = target = f"darwin-{target}"
     elif platform.system() == "Windows":
-        target, suffix = f"windows-{target}", ".exe"
-    return CALC_DIR / "build" / target / f"marlin-calc.{target}{suffix}"
+        preset = target = f"windows-{target}"
+        suffix = ".exe"
+    elif platform.system() == "FreeBSD":
+        preset = f"freebsd-{target}"
+    return CALC_DIR / "build" / preset / f"marlin-calc.{target}{suffix}"
 
 
 def pytest_addoption(parser):

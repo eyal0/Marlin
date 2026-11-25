@@ -24,6 +24,7 @@
     { "name": "mips", "inherits": "cross" },
     { "name": "windows-AMD64", "inherits": "cross" },
     { "name": "windows-x86", "inherits": "cross" },
+    { "name": "freebsd-amd64", "inherits": "base" },
     {
       "name": "darwin-arm64",
       "inherits": "base",
@@ -50,6 +51,7 @@
     { "name": "mips", "configurePreset": "mips" },
     { "name": "windows-AMD64", "configurePreset": "windows-AMD64" },
     { "name": "windows-x86", "configurePreset": "windows-x86" },
+    { "name": "freebsd-amd64", "configurePreset": "freebsd-amd64" },
     { "name": "darwin-arm64", "configurePreset": "darwin-arm64" },
     { "name": "darwin-x86_64", "configurePreset": "darwin-x86_64" }
   ],
@@ -66,6 +68,7 @@
     { "name": "armv7l", "inherits": "test", "configurePreset": "armv7l" },
     { "name": "armv6l", "inherits": "test", "configurePreset": "armv6l" },
     { "name": "mips", "inherits": "test", "configurePreset": "mips" },
+    { "name": "freebsd-amd64", "inherits": "test", "configurePreset": "freebsd-amd64" },
     { "name": "darwin-arm64", "inherits": "test", "configurePreset": "darwin-arm64" },
     { "name": "darwin-x86_64", "inherits": "test", "configurePreset": "darwin-x86_64" }
   ],
@@ -130,6 +133,14 @@
       "steps": [
         { "type": "configure", "name": "windows-x86" },
         { "type": "build", "name": "windows-x86" }
+      ]
+    },
+    {
+      "name": "freebsd-amd64",
+      "steps": [
+        { "type": "configure", "name": "freebsd-amd64" },
+        { "type": "build", "name": "freebsd-amd64" },
+        { "type": "test", "name": "freebsd-amd64" }
       ]
     },
     {

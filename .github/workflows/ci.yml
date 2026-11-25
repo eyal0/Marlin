@@ -86,6 +86,25 @@ jobs:
           path: calc/build/darwin-x86_64/marlin-calc.darwin-x86_64
           if-no-files-found: error
 
+  freebsd:
+    name: freebsd-amd64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and test in a FreeBSD VM
+        uses: vmactions/freebsd-vm@811efaaac0668df8bfb8308c3ec997b5ab50037b # v1.6.0
+        with:
+          release: '14'
+          prepare: |
+            pkg install -y cmake-core python3
+            pkg install -y "py$(python3 -c 'import sys; print("%d%d" % sys.version_info[:2])')-pytest"
+          run: cd calc && cmake --workflow --preset freebsd-amd64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: marlin-calc.freebsd-amd64
+          path: calc/build/freebsd-amd64/marlin-calc.amd64
+          if-no-files-found: error
+
   test-windows:
     name: test ${{ matrix.target }}
     needs: linux
