@@ -41,10 +41,11 @@ as artifacts.
 
 ## Releases
 
-Pushing a tag named `marlin-calc-<version>`, for example `marlin-calc-1.0.0`,
-builds and tests every binary OctoPrint-PrintTimeGenius uses and publishes them
-as a GitHub release, along with `marlin-calc.tar.gz` (all of them, executable)
-and `SHA256SUMS`.
+To make a release, run the Release workflow from the Actions tab, or with
+`gh workflow run release.yml -f version=<version>`. It builds and tests every
+binary OctoPrint-PrintTimeGenius uses from the branch it runs on, tags that
+commit `marlin-calc-<version>`, and publishes the binaries as a GitHub release,
+along with `marlin-calc.tar.gz` (all of them, executable) and `SHA256SUMS`.
 
 Original `README.md` below.
 

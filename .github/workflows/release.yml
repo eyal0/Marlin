@@ -1,15 +1,39 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'marlin-calc-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, for example 1.0.0. The release and its new tag are named marlin-calc-<version>.'
+        required: true
 
 permissions:
   contents: read
 
+env:
+  TAG: marlin-calc-${{ inputs.version }}
+
 jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check that the tag is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$TAG" =~ ^marlin-calc-[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+            echo "::error::Versions may only contain letters, digits, dots, hyphens and underscores."
+            exit 1
+          fi
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" \
+                       --jq ".[].ref | select(. == \"refs/tags/$TAG\")")
+          if [ -n "$existing" ]; then
+            echo "::error::$TAG already exists."
+            exit 1
+          fi
+
   ci:
+    needs: check
     uses: ./.github/workflows/ci.yml
 
   release:
@@ -42,5 +66,5 @@ jobs:
 
             `marlin-calc.tar.gz` contains every binary with its executable bit set, ready to extract into `octoprint_PrintTimeGenius/analyzers/`.
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "$GITHUB_REF_NAME" --notes "$NOTES"
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "$TAG" --notes "$NOTES"
