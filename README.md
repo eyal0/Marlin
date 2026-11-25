@@ -42,10 +42,17 @@ as artifacts.
 ## Releases
 
 To make a release, run the Release workflow from the Actions tab, or with
-`gh workflow run release.yml -f version=<version>`. It builds and tests every
-binary OctoPrint-PrintTimeGenius uses from the branch it runs on, tags that
-commit `marlin-calc-<version>`, and publishes the binaries as a GitHub release,
-along with `marlin-calc.tar.gz` (all of them, executable) and `SHA256SUMS`.
+`gh workflow run release.yml`. It builds and tests every binary
+OctoPrint-PrintTimeGenius uses from the branch it runs on, tags that commit
+`marlin-calc-<version>`, and publishes the binaries as a GitHub release, along
+with `marlin-calc.tar.gz` (all of them, executable) and `SHA256SUMS`.
+
+Versions follow [semantic versioning](https://semver.org). The workflow takes
+the last release's version and increases the part you choose: `patch` (the
+default) for fixes, `minor` for new features, or `major` for changes
+OctoPrint-PrintTimeGenius must adapt to, such as a new command line or output
+format (`gh workflow run release.yml -f bump=minor`). The first release is
+1.0.0.
 
 Original `README.md` below.
 

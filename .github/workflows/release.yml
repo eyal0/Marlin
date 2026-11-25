@@ -3,44 +3,67 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version, for example 1.0.0. The release and its new tag are named marlin-calc-<version>.'
-        required: true
+      bump:
+        description: 'Part of the last version to increase: patch for fixes, minor for new features, major for changes OctoPrint-PrintTimeGenius must adapt to. The first release is 1.0.0.'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 permissions:
   contents: read
 
-env:
-  TAG: marlin-calc-${{ inputs.version }}
+# One at a time, since each release takes its number from the ones before it.
+concurrency:
+  group: release
 
 jobs:
-  check:
+  version:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.next.outputs.version }}
     steps:
-      - name: Check that the tag is new
+      - name: Choose the version
+        id: next
         env:
           GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump }}
         run: |
-          if [[ ! "$TAG" =~ ^marlin-calc-[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
-            echo "::error::Versions may only contain letters, digits, dots, hyphens and underscores."
-            exit 1
+          refs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/marlin-calc-" --jq '.[].ref')
+          latest=$(sed -nE 's#^refs/tags/marlin-calc-((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$#\1#p' <<< "$refs" |
+                   sort -V | tail -n 1)
+          if [ -z "$latest" ]; then
+            version=1.0.0
+          else
+            released=$(gh api "repos/$GITHUB_REPOSITORY/commits/marlin-calc-$latest" --jq .sha)
+            if [ "$released" = "$GITHUB_SHA" ]; then
+              echo "::error::This commit is already released as marlin-calc-$latest."
+              exit 1
+            fi
+            IFS=. read -r major minor patch <<< "$latest"
+            case "$BUMP" in
+              major) version="$((major + 1)).0.0" ;;
+              minor) version="$major.$((minor + 1)).0" ;;
+              patch) version="$major.$minor.$((patch + 1))" ;;
+              *) echo "::error::bump must be patch, minor or major."; exit 1 ;;
+            esac
           fi
-          existing=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" \
-                       --jq ".[].ref | select(. == \"refs/tags/$TAG\")")
-          if [ -n "$existing" ]; then
-            echo "::error::$TAG already exists."
-            exit 1
-          fi
+          echo "Last release: ${latest:-none}. Releasing marlin-calc-$version."
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   ci:
-    needs: check
+    needs: version
     uses: ./.github/workflows/ci.yml
 
   release:
-    needs: ci
+    needs: [version, ci]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      TAG: marlin-calc-${{ needs.version.outputs.version }}
     steps:
       - uses: actions/download-artifact@v8
         with:
