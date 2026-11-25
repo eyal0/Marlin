@@ -813,7 +813,7 @@
 #endif
 
 // Use Junction Deviation for motion if Jerk is disabled
-#if DISABLED(CLASSIC_JERK)
+#if DISABLED(CLASSIC_JERK) || ENABLED(RUNTIME_JERK_MODE)
   #define HAS_JUNCTION_DEVIATION 1
 #endif
 

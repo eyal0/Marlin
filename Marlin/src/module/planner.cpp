@@ -156,8 +156,12 @@ uint32_t Planner::max_acceleration_steps_per_s2[DISTINCT_AXES]; // (steps/s^2) D
   #if HAS_LINEAR_E_JERK
     float Planner::max_e_jerk[DISTINCT_E];      // Calculated from junction_deviation_mm
   #endif
-#else // CLASSIC_JERK
+#endif
+#if ENABLED(CLASSIC_JERK)
   xyze_pos_t Planner::max_jerk;
+#endif
+#if ENABLED(RUNTIME_JERK_MODE)
+  bool Planner::classic_jerk = true;
 #endif
 
 #if ENABLED(SD_ABORT_ON_ENDSTOP_HIT)
@@ -2367,7 +2371,11 @@ bool Planner::_populate_block(
 
     #if HAS_LIN_ADVANCE_K
       // Linear advance is currently not ready for HAS_I_AXIS
-      #define MAX_E_JERK(N) TERN(HAS_LINEAR_E_JERK, max_e_jerk[E_INDEX_N(N)], max_jerk.e)
+      #if ENABLED(RUNTIME_JERK_MODE)
+        #define MAX_E_JERK(N) (classic_jerk ? max_jerk.e : max_e_jerk[E_INDEX_N(N)])
+      #else
+        #define MAX_E_JERK(N) TERN(HAS_LINEAR_E_JERK, max_e_jerk[E_INDEX_N(N)], max_jerk.e)
+      #endif
 
       /**
        * Apply Linear/Pressure Advance for blocks when:
@@ -2477,6 +2485,7 @@ bool Planner::_populate_block(
   float vmax_junction_sqr; // Initial limit on the segment entry velocity (mm/s)^2
 
   #if HAS_JUNCTION_DEVIATION
+   if (TERN1(RUNTIME_JERK_MODE, !classic_jerk)) {
     /**
      * Compute maximum allowable entry speed at junction by centripetal acceleration approximation.
      * Let a circle be tangent to both previous and current path line segments, where the junction
@@ -2668,8 +2677,11 @@ bool Planner::_populate_block(
     else vmax_junction_sqr = minimum_planner_speed_sqr;
 
     prev_unit_vec = unit_vec;
+   }
+  #endif
 
-  #else // CLASSIC_JERK
+  #if ENABLED(CLASSIC_JERK)
+   if (TERN1(RUNTIME_JERK_MODE, classic_jerk)) {
 
     /**
      * Heavily modified. Originally adapted from Průša firmware.
@@ -2737,7 +2749,7 @@ bool Planner::_populate_block(
       if (jerk * v_factor > maxj) v_factor = maxj / jerk;
     }
     vmax_junction_sqr = sq(vmax_junc * v_factor);
-
+   }
   #endif // CLASSIC_JERK
 
   // High acceleration limits override low jerk/junction deviation limits (as fixing trapezoids
